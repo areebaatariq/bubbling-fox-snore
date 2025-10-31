@@ -2,10 +2,11 @@ services:
   - type: web
     name: meal-plan-generator
     env: python
+    root: backend
     pythonVersion: "3.13.4"
     preBuildCommand: "ls -R"
     buildCommand: "python -m pip install -r requirements.txt"
-    startCommand: "python -m uvicorn backend.main:app --host 0.0.0.0 --port $PORT"
+    startCommand: "python -m uvicorn main:app --host 0.0.0.0 --port $PORT"
     autoDeploy: true
     envVars:
       - key: MONGO_URI
