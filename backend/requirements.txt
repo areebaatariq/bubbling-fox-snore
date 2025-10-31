@@ -2,6 +2,6 @@ fastapi
 uvicorn
 pymongo
 motor
-email-validator
+pydantic[email]
 passlib
 python-jose
