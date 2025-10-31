@@ -13,6 +13,7 @@ origins = [
     "http://localhost:3000",
     "http://localhost:5173",
     "http://localhost:5137",
+    "https://bubbling-fox-snore.onrender.com",
 ]
 
 app.add_middleware(
