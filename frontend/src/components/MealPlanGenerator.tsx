@@ -25,7 +25,7 @@ const MealPlanGenerator: React.FC<MealPlanGeneratorProps> = ({ userProfile }) =>
   const [newShoppingQuantity, setNewShoppingQuantity] = useState("");
 
   useEffect(() => {
-    fetch("http://localhost:8000/api/v1/healthz")
+    fetch("https://snapdev-demo-backend.onrender.com/api/v1/healthz")
       .then((response) => response.json())
       .then((data) => console.log("Health check:", data))
       .catch((error) => console.error("Health check failed:", error));
