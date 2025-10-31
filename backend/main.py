@@ -1,29 +1,3 @@
-import os
-import subprocess
-
-# --- Start Debugging ---
-print("--- STARTING DEBUG LOGS ---")
-try:
-    cwd = os.getcwd()
-    print(f"Current Working Directory: {cwd}")
-
-    # The traceback shows the script runs from /opt/render/project/src/backend/main.py
-    # So the project root should be /opt/render/project/src
-    project_root = "/opt/render/project/src"
-    print(f"Listing contents of assumed project root: {project_root}")
-    
-    result = subprocess.run(['ls', '-laR', project_root], capture_output=True, text=True, check=True)
-    print("--- Directory Listing ---")
-    print(result.stdout)
-    print("-------------------------")
-
-except Exception as e:
-    print(f"An error occurred during debugging: {e}")
-    if isinstance(e, subprocess.CalledProcessError):
-        print(f"STDERR from ls command: {e.stderr}")
-
-print("--- FINISHED DEBUG LOGS ---")
-# --- End Debugging ---
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pymongo import MongoClient
