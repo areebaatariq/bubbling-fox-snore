@@ -6,4 +6,3 @@ pydantic[email]
 passlib
 python-jose
 python-multipart
-python-multipart
