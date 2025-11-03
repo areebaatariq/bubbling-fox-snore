@@ -40,7 +40,7 @@ const Index = () => {
   useEffect(() => {
     const fetchProfile = async () => {
       try {
-        const API_URL = `${import.meta.env.VITE_API_URL || "https://bubbling-fox-snore.onrender.com"}/api/v1`;
+        const API_URL = `${import.meta.env.VITE_API_URL || "https://demo-backend-h2eq.onrender.com"}/api/v1`;
         const response = await axios.get(`${API_URL}/profile`);
         setProfile(response.data);
       } catch (error) {

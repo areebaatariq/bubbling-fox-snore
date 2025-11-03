@@ -63,7 +63,7 @@ const UserProfileSetup: React.FC<UserProfileSetupProps> = ({
         weekly_budget: values.weeklyBudget,
       };
 
-      const API_URL = `${import.meta.env.VITE_API_URL || "https://bubbling-fox-snore.onrender.com"}/api/v1`;
+      const API_URL = `${import.meta.env.VITE_API_URL || "https://demo-backend-h2eq.onrender.com"}/api/v1`;
       const response = await axios.put(`${API_URL}/profile`, profileData);
 
       toast.success("Profile saved successfully!");
