@@ -418,3 +418,9 @@ async def update_shopping_list(shopping_list: dict):
     users_db[user_email]["shopping_list"] = shopping_list.get("items", [])
     save_users(users_db)
     return {"message": "Shopping list updated successfully"}
+
+# For local development - Render uses uvicorn directly
+if __name__ == "__main__":
+    import uvicorn
+    port = int(os.getenv("PORT", 8000))
+    uvicorn.run(app, host="0.0.0.0", port=port)

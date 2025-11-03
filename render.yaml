@@ -5,5 +5,5 @@ services:
     root: backend
     pythonVersion: "3.13.4"
     buildCommand: "python -m pip install -r requirements.txt && cp ../meals.json . || echo 'Meals.json copy failed, will use parent path'"
-    startCommand: "python -m uvicorn main:app --host 0.0.0.0 --port $PORT"
+    startCommand: "uvicorn main:app --host 0.0.0.0 --port $PORT"
     autoDeploy: true
