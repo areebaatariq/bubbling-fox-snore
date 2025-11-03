@@ -26,51 +26,65 @@ USERS_JSON_PATH = BASE_DIR / "users.json"
 
 # --- Data Loading ---
 def load_meals():
-    try:
-        with open(MEALS_JSON_PATH, "r") as f:
-            meals_data = json.load(f)
-        print("Successfully loaded meals.json")
-        # Convert meals format to match expected structure
-        formatted_meals = []
-        for meal in meals_data:
-            # Convert ingredients from {item, quantity} to {name, quantity, unit}
-            formatted_ingredients = []
-            for ing in meal.get("ingredients", []):
-                # Split quantity string into number and unit if possible
-                qty_str = ing.get("quantity", "")
-                # Try to parse quantity and unit
-                parts = qty_str.split(maxsplit=1)
-                if len(parts) == 2:
-                    try:
-                        qty = float(parts[0])
-                        unit = parts[1]
-                    except ValueError:
+    # Try multiple paths for meals.json (local dev vs Render deployment)
+    possible_paths = [
+        MEALS_JSON_PATH,  # Parent directory (for local dev)
+        BASE_DIR / "meals.json",  # Current directory (for Render after copy)
+        Path("meals.json"),  # Current working directory
+    ]
+    
+    for meals_path in possible_paths:
+        try:
+            with open(meals_path, "r") as f:
+                meals_data = json.load(f)
+            print(f"Successfully loaded meals.json from {meals_path}")
+            
+            # Convert meals format to match expected structure
+            formatted_meals = []
+            for meal in meals_data:
+                # Convert ingredients from {item, quantity} to {name, quantity, unit}
+                formatted_ingredients = []
+                for ing in meal.get("ingredients", []):
+                    # Split quantity string into number and unit if possible
+                    qty_str = ing.get("quantity", "")
+                    # Try to parse quantity and unit
+                    parts = qty_str.split(maxsplit=1)
+                    if len(parts) == 2:
+                        try:
+                            qty = float(parts[0])
+                            unit = parts[1]
+                        except ValueError:
+                            qty = 1
+                            unit = qty_str
+                    else:
                         qty = 1
                         unit = qty_str
-                else:
-                    qty = 1
-                    unit = qty_str
+                    
+                    formatted_ingredients.append({
+                        "name": ing.get("item", ""),
+                        "quantity": qty,
+                        "unit": unit
+                    })
                 
-                formatted_ingredients.append({
-                    "name": ing.get("item", ""),
-                    "quantity": qty,
-                    "unit": unit
+                formatted_meals.append({
+                    "id": meal.get("id", ""),
+                    "name": meal.get("name", ""),
+                    "recipe": meal.get("recipe", ""),
+                    "ingredients": formatted_ingredients,
+                    "portionSize": meal.get("portionSize", 2)
                 })
             
-            formatted_meals.append({
-                "id": meal.get("id", ""),
-                "name": meal.get("name", ""),
-                "recipe": meal.get("recipe", ""),
-                "ingredients": formatted_ingredients,
-                "portionSize": meal.get("portionSize", 2)
-            })
-        return formatted_meals
-    except FileNotFoundError:
-        print(f"meals.json not found at {MEALS_JSON_PATH}")
-        return []
-    except json.JSONDecodeError as e:
-        print(f"Error decoding meals.json: {e}")
-        return []
+            # Return formatted meals after processing all meals
+            return formatted_meals
+        except FileNotFoundError:
+            continue  # Try next path
+        except json.JSONDecodeError as e:
+            print(f"Error decoding meals.json at {meals_path}: {e}")
+            continue  # Try next path
+    
+    # If all paths failed
+    print(f"meals.json not found in any of these locations: {possible_paths}")
+    return []
 
 meals_data = load_meals()
 
@@ -129,8 +143,7 @@ class Token(BaseModel):
     token_type: str
 
 class User(UserBase):
-    class Config:
-        from_attributes = True
+    model_config = {"from_attributes": True}
 
 class UserProfile(BaseModel):
     dietary_preferences: Optional[list[str]] = None
