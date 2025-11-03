@@ -40,7 +40,8 @@ const Index = () => {
   useEffect(() => {
     const fetchProfile = async () => {
       try {
-        const response = await axios.get("http://localhost:8000/api/v1/profile");
+        const API_URL = `${import.meta.env.VITE_API_URL || "https://bubbling-fox-snore.onrender.com"}/api/v1`;
+        const response = await axios.get(`${API_URL}/profile`);
         setProfile(response.data);
       } catch (error) {
         console.error("Failed to fetch profile:", error);

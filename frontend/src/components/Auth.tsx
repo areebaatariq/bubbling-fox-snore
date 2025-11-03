@@ -16,8 +16,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
 import axios from "axios";
-
-const API_URL = "http://localhost:8000/api/v1";
+import { API_URL } from "@/config/api";
 
 const authSchema = z.object({
   email: z.string().email(),

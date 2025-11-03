@@ -63,7 +63,8 @@ const UserProfileSetup: React.FC<UserProfileSetupProps> = ({
         weekly_budget: values.weeklyBudget,
       };
 
-      const response = await axios.put("http://localhost:8000/api/v1/profile", profileData);
+      const API_URL = `${import.meta.env.VITE_API_URL || "https://bubbling-fox-snore.onrender.com"}/api/v1`;
+      const response = await axios.put(`${API_URL}/profile`, profileData);
 
       toast.success("Profile saved successfully!");
       // Call onProfileComplete with the response data (already in frontend format)

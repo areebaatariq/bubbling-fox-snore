@@ -2,8 +2,11 @@
 
 import React, { useState, useEffect } from "react";
 import { UserProfile, Meal, ShoppingListItem, MealPlan, DayPlan } from "@/types";
+import { API_BASE_URL } from "@/config/api";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+
+const API_BASE = API_BASE_URL;
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -30,7 +33,7 @@ const MealPlanGenerator: React.FC<MealPlanGeneratorProps> = ({ userProfile }) =>
 
   const fetchMealPlan = async () => {
     try {
-      const response = await fetch("http://localhost:8000/api/v1/meal-plan");
+      const response = await fetch(`${API_BASE}/api/v1/meal-plan`);
       if (response.ok) {
         const data = await response.json();
         setMealPlan(data);
@@ -42,7 +45,7 @@ const MealPlanGenerator: React.FC<MealPlanGeneratorProps> = ({ userProfile }) =>
 
   const fetchShoppingList = async () => {
     try {
-      const response = await fetch("http://localhost:8000/api/v1/shopping-list");
+      const response = await fetch(`${API_BASE}/api/v1/shopping-list`);
       if (response.ok) {
         const data = await response.json();
         setShoppingList(data.items);
@@ -54,7 +57,7 @@ const MealPlanGenerator: React.FC<MealPlanGeneratorProps> = ({ userProfile }) =>
 
   const generateMealPlan = async () => {
     try {
-      const response = await fetch("http://localhost:8000/api/v1/meal-plan/generate", {
+      const response = await fetch(`${API_BASE}/api/v1/meal-plan/generate`, {
         method: "POST",
       });
       if (response.ok) {
@@ -138,7 +141,7 @@ const MealPlanGenerator: React.FC<MealPlanGeneratorProps> = ({ userProfile }) =>
     recalculateShoppingList(updatedPlan);
     
     try {
-      await fetch("http://localhost:8000/api/v1/meal-plan", {
+      await fetch(`${API_BASE}/api/v1/meal-plan`, {
         method: "PUT",
         headers: {
           "Content-Type": "application/json",
@@ -154,7 +157,7 @@ const MealPlanGenerator: React.FC<MealPlanGeneratorProps> = ({ userProfile }) =>
 
   const updateShoppingListOnBackend = async (updatedList: ShoppingListItem[]) => {
     try {
-      await fetch("http://localhost:8000/api/v1/shopping-list", {
+      await fetch(`${API_BASE}/api/v1/shopping-list`, {
         method: "PUT",
         headers: {
           "Content-Type": "application/json",
