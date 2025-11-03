@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import { UserProfile, Meal, ShoppingListItem, MealPlan } from "@/types";
+import { UserProfile, Meal, ShoppingListItem, MealPlan, DayPlan } from "@/types";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -9,7 +9,6 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { PlusCircle, MinusCircle, RefreshCcw, Trash2 } from "lucide-react";
 import { toast } from "sonner";
-import { mockMeals, mockShoppingListItems, getFilteredMeals } from "@/data/mockData";
 import { v4 as uuidv4 } from 'uuid';
 
 interface MealPlanGeneratorProps {
@@ -25,111 +24,146 @@ const MealPlanGenerator: React.FC<MealPlanGeneratorProps> = ({ userProfile }) =>
   const [newShoppingQuantity, setNewShoppingQuantity] = useState("");
 
   useEffect(() => {
-    fetch("https://snapdev-demo-backend.onrender.com/api/v1/healthz")
-      .then((response) => response.json())
-      .then((data) => console.log("Health check:", data))
-      .catch((error) => console.error("Health check failed:", error));
-
-    const storedMealPlan = localStorage.getItem("mealPlan");
-    const storedShoppingList = localStorage.getItem("shoppingList");
-    if (storedMealPlan && storedShoppingList) {
-      setMealPlan(JSON.parse(storedMealPlan));
-      setShoppingList(JSON.parse(storedShoppingList));
-    }
+    fetchMealPlan();
+    fetchShoppingList();
   }, []);
 
-  useEffect(() => {
-    if (mealPlan) {
-      localStorage.setItem("mealPlan", JSON.stringify(mealPlan));
+  const fetchMealPlan = async () => {
+    try {
+      const response = await fetch("http://localhost:8000/api/v1/meal-plan");
+      if (response.ok) {
+        const data = await response.json();
+        setMealPlan(data);
+      }
+    } catch (error) {
+      console.error("Failed to fetch meal plan:", error);
     }
-    if (shoppingList) {
-      localStorage.setItem("shoppingList", JSON.stringify(shoppingList));
-    }
-  }, [mealPlan, shoppingList]);
-
-  const generateMealPlan = () => {
-    const availableMeals = getFilteredMeals(userProfile.dietaryRestrictions);
-    if (availableMeals.length === 0) {
-      toast.error("No meals found matching your dietary restrictions. Please adjust your profile.");
-      return;
-    }
-
-    const newMeals: MealPlan["meals"] = daysOfWeek.map((day) => {
-      const breakfast = availableMeals[Math.floor(Math.random() * availableMeals.length)];
-      const lunch = availableMeals[Math.floor(Math.random() * availableMeals.length)];
-      const dinner = availableMeals[Math.floor(Math.random() * availableMeals.length)];
-      return { day, breakfast, lunch, dinner };
-    });
-
-    const generatedShoppingList = generateShoppingListFromMeals(newMeals);
-
-    setMealPlan({
-      week: "Current Week", // Simplified for MVP
-      meals: newMeals,
-      shoppingList: generatedShoppingList, // This will be updated by the separate shopping list state
-    });
-    setShoppingList(generatedShoppingList);
-    toast.success("Weekly meal plan generated!");
   };
 
-  const generateShoppingListFromMeals = (meals: MealPlan["meals"]): ShoppingListItem[] => {
-    const list: { [key: string]: { item: string; quantity: string; price: number; store: string } } = {};
+  const fetchShoppingList = async () => {
+    try {
+      const response = await fetch("http://localhost:8000/api/v1/shopping-list");
+      if (response.ok) {
+        const data = await response.json();
+        setShoppingList(data.items);
+      }
+    } catch (error) {
+      console.error("Failed to fetch shopping list:", error);
+    }
+  };
 
-    meals.forEach(dayPlan => {
-      [dayPlan.breakfast, dayPlan.lunch, dayPlan.dinner].forEach(meal => {
-        if (meal) {
-          meal.ingredients.forEach(ingredient => {
-            const key = ingredient.item.toLowerCase();
-            if (!list[key]) {
-              list[key] = {
-                item: ingredient.item,
-                quantity: ingredient.quantity,
-                price: parseFloat((Math.random() * 5 + 1).toFixed(2)), // Mock price
-                store: "Local Grocer", // Simplified
-              };
+  const generateMealPlan = async () => {
+    try {
+      const response = await fetch("http://localhost:8000/api/v1/meal-plan/generate", {
+        method: "POST",
+      });
+      if (response.ok) {
+        const data = await response.json();
+        setMealPlan(data);
+        const newShoppingList = generateShoppingList(data);
+        setShoppingList(newShoppingList);
+        updateShoppingListOnBackend(newShoppingList);
+        toast.success("Weekly meal plan generated!");
+      } else {
+        toast.error("Failed to generate meal plan.");
+      }
+    } catch (error) {
+      toast.error("An error occurred while generating the meal plan.");
+    }
+  };
+
+
+
+  const generateShoppingList = (plan: MealPlan): ShoppingListItem[] => {
+    const ingredientsMap: { [key: string]: { quantity: number; unit: string; name: string } } = {};
+  
+    plan.meals.forEach((dayPlan) => {
+      ["breakfast", "lunch", "dinner"].forEach((mealType) => {
+        const meal = dayPlan[mealType as keyof DayPlan] as Meal | undefined;
+        if (meal && meal.ingredients) {
+          meal.ingredients.forEach((ingredient: any) => {
+            // Handle both formats: {item, quantity} and {name, quantity, unit}
+            const ingName = ingredient.name || ingredient.item || "";
+            const ingQty = ingredient.quantity || "1";
+            const ingUnit = ingredient.unit || "";
+            
+            const key = ingName.toLowerCase();
+            if (ingredientsMap[key]) {
+              // Simple aggregation - assumes units are the same
+              const qty = typeof ingQty === 'number' ? ingQty : parseFloat(ingQty) || 1;
+              ingredientsMap[key].quantity += qty;
             } else {
-              // For MVP, just keep the first quantity, or you could try to sum them
-              // For now, we'll just ensure the item is on the list
+              const qty = typeof ingQty === 'number' ? ingQty : parseFloat(ingQty) || 1;
+              ingredientsMap[key] = {
+                name: ingName,
+                quantity: qty,
+                unit: ingUnit || "",
+              };
             }
           });
         }
       });
     });
-
-    return Object.values(list).map(item => ({
-      id: uuidv4(),
-      item: item.item,
-      quantity: item.quantity,
-      store: item.store,
-      price: item.price,
-      checked: false,
+  
+    return Object.keys(ingredientsMap).map((key) => ({
+      name: ingredientsMap[key].name,
+      quantity: ingredientsMap[key].unit 
+        ? `${ingredientsMap[key].quantity} ${ingredientsMap[key].unit}`.trim()
+        : `${ingredientsMap[key].quantity}`,
+      completed: false,
     }));
   };
 
-  const handleSwapMeal = (day: string, mealType: "breakfast" | "lunch" | "dinner") => {
+  const recalculateShoppingList = (updatedPlan: MealPlan) => {
+    const newShoppingList = generateShoppingList(updatedPlan);
+    setShoppingList(newShoppingList);
+    updateShoppingListOnBackend(newShoppingList);
+  };
+
+  const handleSwapMeal = async (day: string, mealType: "breakfast" | "lunch" | "dinner") => {
     if (!mealPlan) return;
-    const availableMeals = getFilteredMeals(userProfile.dietaryRestrictions);
-    if (availableMeals.length === 0) {
-      toast.error("No alternative meals found matching your dietary restrictions.");
-      return;
-    }
-    const newMeal = availableMeals[Math.floor(Math.random() * availableMeals.length)];
-    const updatedMeals = mealPlan.meals.map((d) =>
-      d.day === day ? { ...d, [mealType]: newMeal } : d
-    );
-    setMealPlan({ ...mealPlan, meals: updatedMeals });
-    setShoppingList(generateShoppingListFromMeals(updatedMeals)); // Regenerate shopping list
+    
+    // For now, regenerate the whole plan - in production, you'd fetch a single meal
+    await generateMealPlan();
     toast.info(`Swapped ${mealType} for ${day}.`);
   };
 
-  const handleRemoveMeal = (day: string, mealType: "breakfast" | "lunch" | "dinner") => {
+  const handleRemoveMeal = async (day: string, mealType: "breakfast" | "lunch" | "dinner") => {
     if (!mealPlan) return;
     const updatedMeals = mealPlan.meals.map((d) =>
       d.day === day ? { ...d, [mealType]: undefined } : d
     );
-    setMealPlan({ ...mealPlan, meals: updatedMeals });
-    setShoppingList(generateShoppingListFromMeals(updatedMeals)); // Regenerate shopping list
-    toast.info(`Removed ${mealType} for ${day}.`);
+    const updatedPlan = { ...mealPlan, meals: updatedMeals };
+    setMealPlan(updatedPlan);
+    recalculateShoppingList(updatedPlan);
+    
+    try {
+      await fetch("http://localhost:8000/api/v1/meal-plan", {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(updatedPlan),
+      });
+      toast.info(`Removed ${mealType} for ${day}.`);
+    } catch (error) {
+      toast.error("Failed to update meal plan.");
+      // Optionally revert state changes
+    }
+  };
+
+  const updateShoppingListOnBackend = async (updatedList: ShoppingListItem[]) => {
+    try {
+      await fetch("http://localhost:8000/api/v1/shopping-list", {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ items: updatedList }),
+      });
+    } catch (error) {
+      toast.error("Failed to update shopping list.");
+    }
   };
 
   const handleAddShoppingItem = () => {
@@ -138,28 +172,31 @@ const MealPlanGenerator: React.FC<MealPlanGeneratorProps> = ({ userProfile }) =>
       return;
     }
     const newItem: ShoppingListItem = {
-      id: uuidv4(),
-      item: newShoppingItem.trim(),
+      name: newShoppingItem.trim(),
       quantity: newShoppingQuantity.trim(),
-      store: "Local Grocer", // Default store for manually added items
-      price: parseFloat((Math.random() * 5 + 1).toFixed(2)), // Mock price
-      checked: false,
+      completed: false,
     };
-    setShoppingList((prev) => [...prev, newItem]);
+    const updatedList = [...shoppingList, newItem];
+    setShoppingList(updatedList);
+    updateShoppingListOnBackend(updatedList);
     setNewShoppingItem("");
     setNewShoppingQuantity("");
     toast.success("Item added to shopping list.");
   };
 
-  const handleRemoveShoppingItem = (id: string) => {
-    setShoppingList((prev) => prev.filter((item) => item.id !== id));
+  const handleRemoveShoppingItem = (itemName: string) => {
+    const updatedList = shoppingList.filter((item) => item.name !== itemName);
+    setShoppingList(updatedList);
+    updateShoppingListOnBackend(updatedList);
     toast.info("Item removed from shopping list.");
   };
 
-  const handleToggleShoppingItem = (id: string) => {
-    setShoppingList((prev) =>
-      prev.map((item) => (item.id === id ? { ...item, checked: !item.checked } : item))
+  const handleToggleShoppingItem = (itemName: string) => {
+    const updatedList = shoppingList.map((item) =>
+      item.name === itemName ? { ...item, completed: !item.completed } : item
     );
+    setShoppingList(updatedList);
+    updateShoppingListOnBackend(updatedList);
   };
 
   return (
@@ -249,26 +286,26 @@ const MealPlanGenerator: React.FC<MealPlanGeneratorProps> = ({ userProfile }) =>
                 <ul className="space-y-2">
                   {shoppingList.map((item) => (
                     <li
-                      key={item.id}
+                      key={item.name}
                       className="flex items-center justify-between bg-muted/50 p-3 rounded-md"
                     >
                       <div className="flex items-center space-x-3 flex-1">
                         <Checkbox
-                          id={`item-${item.id}`}
-                          checked={item.checked}
-                          onCheckedChange={() => handleToggleShoppingItem(item.id)}
+                          id={`item-${item.name}`}
+                          checked={item.completed}
+                          onCheckedChange={() => handleToggleShoppingItem(item.name)}
                         />
                         <Label
-                          htmlFor={`item-${item.id}`}
-                          className={`flex-1 text-left ${item.checked ? "line-through text-muted-foreground" : ""}`}
+                          htmlFor={`item-${item.name}`}
+                          className={`flex-1 text-left ${item.completed ? "line-through text-muted-foreground" : ""}`}
                         >
-                          {item.item} ({item.quantity}) - ${item.price.toFixed(2)} ({item.store})
+                          {item.name} ({item.quantity})
                         </Label>
                       </div>
                       <Button
                         variant="destructive"
                         size="sm"
-                        onClick={() => handleRemoveShoppingItem(item.id)}
+                        onClick={() => handleRemoveShoppingItem(item.name)}
                       >
                         <Trash2 className="h-4 w-4" />
                       </Button>

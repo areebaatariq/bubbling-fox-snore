@@ -1,8 +1,7 @@
 fastapi
-uvicorn
-pymongo
-motor
+uvicorn[standard]
+python-dotenv
+python-jose[cryptography]
+passlib[bcrypt]
 pydantic[email]
-passlib
-python-jose
 python-multipart

@@ -1,6 +1,7 @@
 "use client";
 
 import React from "react";
+import axios from "axios";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
@@ -54,16 +55,23 @@ const UserProfileSetup: React.FC<UserProfileSetupProps> = ({
     },
   });
 
-  function onSubmit(values: z.infer<typeof formSchema>) {
-    console.log("Form submitted with values:", values);
-    const profile: UserProfile = {
-      dietaryRestrictions: values.dietaryRestrictions || [],
-      otherDietaryRestrictions: values.otherDietaryRestrictions || "",
-      weeklyBudget: values.weeklyBudget,
-    };
-    localStorage.setItem("userProfile", JSON.stringify(profile));
-    onProfileComplete(profile);
-    toast.success("Profile saved successfully!");
+  async function onSubmit(values: z.infer<typeof formSchema>) {
+    try {
+      const profileData = {
+        dietary_preferences: values.dietaryRestrictions || [],
+        other_dietary_restrictions: values.otherDietaryRestrictions || "",
+        weekly_budget: values.weeklyBudget,
+      };
+
+      const response = await axios.put("http://localhost:8000/api/v1/profile", profileData);
+
+      toast.success("Profile saved successfully!");
+      // Call onProfileComplete with the response data (already in frontend format)
+      onProfileComplete(response.data);
+    } catch (error) {
+      console.error("Failed to save profile:", error);
+      toast.error("Failed to save profile. Please try again.");
+    }
   }
 
   return (

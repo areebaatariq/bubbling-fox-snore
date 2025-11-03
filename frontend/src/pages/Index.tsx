@@ -1,36 +1,14 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
+import axios from "axios";
 import { Settings } from "lucide-react";
 import UserProfileSetup from "@/components/UserProfileSetup";
 import { UserProfile } from "@/types";
 import MealPlanGenerator from "@/components/MealPlanGenerator"; // Import the new component
 
 // Placeholder for the main application content after profile setup
-const MealPlanDashboard: React.FC = () => {
-  const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
-
-  useEffect(() => {
-    const storedProfile = localStorage.getItem("userProfile");
-    if (storedProfile) {
-      setUserProfile(JSON.parse(storedProfile));
-    }
-  }, []);
-
-  if (!userProfile) {
-    return (
-      <div className="min-h-screen flex flex-col items-center justify-center bg-gray-900 text-white">
-        <Settings
-          className="w-16 h-16 text-gray-400 animate-spin mb-8"
-          style={{ animationDuration: "3s" }}
-        />
-        <h1 className="text-xl font-medium text-gray-300 text-center max-w-md">
-          Loading user profile...
-        </h1>
-      </div>
-    );
-  }
-
+const MealPlanDashboard: React.FC<{ userProfile: UserProfile }> = ({ userProfile }) => {
   return (
     <div className="min-h-screen flex flex-col items-center justify-start bg-background text-foreground p-4">
       <h1 className="text-4xl font-bold mb-4">Welcome to MealPlanr!</h1>
@@ -60,11 +38,18 @@ const Index = () => {
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    const storedProfile = localStorage.getItem("userProfile");
-    if (storedProfile) {
-      setProfile(JSON.parse(storedProfile));
-    }
-    setIsLoading(false);
+    const fetchProfile = async () => {
+      try {
+        const response = await axios.get("http://localhost:8000/api/v1/profile");
+        setProfile(response.data);
+      } catch (error) {
+        console.error("Failed to fetch profile:", error);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchProfile();
   }, []);
 
   const handleProfileComplete = (newProfile: UserProfile) => {
@@ -88,8 +73,14 @@ const Index = () => {
     );
   }
 
-  return profile ? (
-    <MealPlanDashboard />
+  // Check if profile exists and has at least dietaryRestrictions or weeklyBudget
+  const hasProfile = profile && (
+    (profile.dietaryRestrictions && profile.dietaryRestrictions.length > 0) ||
+    profile.weeklyBudget > 0
+  );
+
+  return hasProfile ? (
+    <MealPlanDashboard userProfile={profile} />
   ) : (
     <UserProfileSetup onProfileComplete={handleProfileComplete} />
   );

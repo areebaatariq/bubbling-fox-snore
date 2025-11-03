@@ -13,21 +13,18 @@ export interface Meal {
 }
 
 export interface ShoppingListItem {
-  id: string;
-  item: string;
+  name: string;
   quantity: string;
-  store: string; // Simplified, could be store ID
-  price: number; // Mock price
-  checked: boolean;
+  completed: boolean;
+}
+
+export interface DayPlan {
+  day: string;
+  breakfast?: Meal;
+  lunch?: Meal;
+  dinner?: Meal;
 }
 
 export interface MealPlan {
-  week: string; // e.g., "2023-W40"
-  meals: {
-    day: string; // e.g., "Monday"
-    breakfast?: Meal;
-    lunch?: Meal;
-    dinner?: Meal;
-  }[];
-  shoppingList: ShoppingListItem[];
+  meals: DayPlan[];
 }

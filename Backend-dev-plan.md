@@ -1,284 +1,318 @@
-# Backend Development Plan: MealPlanr
+# 1️⃣ Executive Summary
 
-### 1️⃣ Executive Summary
-This document outlines the backend development plan for MealPlanr, a personalized meal planning application. The backend will be built using FastAPI (Python 3.13) and will connect to a MongoDB Atlas database using Motor. The development will follow a dynamic sprint plan, with manual testing after every task. This plan adheres to the constraints of no Docker, a single `main` branch Git workflow, and an API base path of `/api/v1`.
+This document outlines the backend development plan for the MealPlanr application. The goal is to build a FastAPI backend with a MongoDB Atlas database to replace the current frontend's mock data and localStorage-based persistence.
 
-### 2️⃣ In-Scope & Success Criteria
+The development will follow these constraints:
+- **Backend:** FastAPI (Python 3.13, async)
+- **Database:** MongoDB Atlas using Motor and Pydantic v2 models
+- **No Docker**
+- **Testing:** Manual testing after every task via the frontend
+- **Git Workflow:** Single `main` branch
+
+The plan is broken down into dynamic sprints (S0...Sn) to cover all frontend-visible features.
+
+# 2️⃣ In-Scope & Success Criteria
+
 - **In-Scope Features:**
-  - User profile setup (dietary restrictions, budget).
-  - Weekly meal plan generation based on user profile.
-  - Ability to swap and remove meals from the plan.
-  - Automatically generated shopping list based on the meal plan.
-  - Ability to add, remove, and check off items from the shopping list.
-- **Success Criteria:**
-  - All frontend features are fully functional end-to-end with the live backend.
-  - All task-level manual tests pass via the UI.
-  - Each sprint's code is pushed to the `main` branch after successful verification.
+  - User profile setup (dietary restrictions, budget)
+  - User authentication (signup, login, logout)
+  - Meal plan generation based on user profile
+  - Meal swapping and removal
+  - Shopping list generation from the meal plan
+  - Shopping list item management (add, remove, toggle)
 
-### 3️⃣ API Design
+- **Success Criteria:**
+  - All frontend features are fully functional and connected to the backend.
+  - All task-level manual tests pass via the UI.
+  - Each sprint's code is pushed to the `main` branch after verification.
+
+# 3️⃣ API Design
+
 - **Base Path:** `/api/v1`
 - **Error Envelope:** `{ "error": "message" }`
 
 ---
 
-- **Endpoint:** `POST /api/v1/auth/signup`
+### Auth Endpoints
+
+- **`POST /auth/signup`**
   - **Purpose:** Register a new user.
-  - **Request Shape:** `{ "email": "user@example.com", "password": "password123" }`
-  - **Response Shape:** `{ "access_token": "jwt_token", "token_type": "bearer" }`
-  - **Validation:** Email must be valid and unique. Password must be securely hashed.
+  - **Request:** `{ "email": "user@example.com", "password": "password123" }`
+  - **Response:** `{ "token": "jwt_token" }`
+  - **Validation:** Email must be valid and unique. Password must be strong.
 
-- **Endpoint:** `POST /api/v1/auth/login`
-  - **Purpose:** Authenticate a user and issue a JWT.
-  - **Request Shape:** Form data with `username` (email) and `password`.
-  - **Response Shape:** `{ "access_token": "jwt_token", "token_type": "bearer" }`
-  - **Validation:** Credentials must match a user in the database.
+- **`POST /auth/login`**
+  - **Purpose:** Log in an existing user.
+  - **Request:** `{ "email": "user@example.com", "password": "password123" }`
+  - **Response:** `{ "token": "jwt_token" }`
 
-- **Endpoint:** `GET /api/v1/auth/me`
-  - **Purpose:** Get the current authenticated user's details.
-  - **Request Shape:** None (uses JWT from header).
-  - **Response Shape:** `{ "id": "...", "email": "...", "profile": { ... } }`
+- **`GET /auth/me`**
+  - **Purpose:** Get the current logged-in user's data.
+  - **Request:** (Requires JWT in header)
+  - **Response:** `{ "id": "...", "email": "...", "profile": { ... } }`
 
-- **Endpoint:** `PUT /api/v1/profile`
-  - **Purpose:** Update the user's profile.
-  - **Request Shape:** `{ "weeklyBudget": 75, "dietaryRestrictions": ["vegetarian"], "otherDietaryRestrictions": "..." }`
-  - **Response Shape:** The updated profile object.
+### User Profile Endpoints
 
-- **Endpoint:** `POST /api/v1/meal-plan/generate`
+- **`PUT /profile`**
+  - **Purpose:** Create or update the user's profile.
+  - **Request:** (Requires JWT) `{ "dietaryRestrictions": ["vegetarian"], "weeklyBudget": 75, "otherDietaryRestrictions": "No peanuts" }`
+  - **Response:** The updated user profile object.
+
+### Meal Plan Endpoints
+
+- **`POST /meal-plan/generate`**
   - **Purpose:** Generate a new weekly meal plan for the user.
-  - **Request Shape:** None.
-  - **Response Shape:** The full `MealPlan` object.
+  - **Request:** (Requires JWT)
+  - **Response:** The generated meal plan object.
 
-- **Endpoint:** `GET /api/v1/meal-plan`
-  - **Purpose:** Retrieve the current week's meal plan.
-  - **Request Shape:** None.
-  - **Response Shape:** The full `MealPlan` object.
+- **`GET /meal-plan`**
+  - **Purpose:** Get the current user's meal plan.
+  - **Request:** (Requires JWT)
+  - **Response:** The current meal plan object.
 
-- **Endpoint:** `POST /api/v1/meal-plan/swap`
-  - **Purpose:** Swap a meal in the current plan.
-  - **Request Shape:** `{ "day": "Monday", "mealType": "breakfast" }`
-  - **Response Shape:** The updated `MealPlan` object.
+- **`PUT /meal-plan`**
+    - **Purpose:** Update the user's meal plan (e.g., swap/remove a meal).
+    - **Request:** (Requires JWT) The updated meal plan object.
+    - **Response:** The updated meal plan object.
 
-- **Endpoint:** `POST /api/v1/meal-plan/remove`
-  - **Purpose:** Remove a meal from the current plan.
-  - **Request Shape:** `{ "day": "Monday", "mealType": "breakfast" }`
-  - **Response Shape:** The updated `MealPlan` object.
+### Shopping List Endpoints
 
-- **Endpoint:** `POST /api/v1/shopping-list/item`
-  - **Purpose:** Add an item to the shopping list.
-  - **Request Shape:** `{ "item": "Milk", "quantity": "1 gallon" }`
-  - **Response Shape:** The newly created `ShoppingListItem` object.
+- **`GET /shopping-list`**
+    - **Purpose:** Get the user's shopping list.
+    - **Request:** (Requires JWT)
+    - **Response:** The shopping list array.
 
-- **Endpoint:** `DELETE /api/v1/shopping-list/item/{item_id}`
-  - **Purpose:** Remove an item from the shopping list.
-  - **Request Shape:** None.
-  - **Response Shape:** `204 No Content`.
+- **`PUT /shopping-list`**
+    - **Purpose:** Update the user's shopping list (add, remove, toggle items).
+    - **Request:** (Requires JWT) The updated shopping list array.
+    - **Response:** The updated shopping list array.
 
-- **Endpoint:** `PATCH /api/v1/shopping-list/item/{item_id}`
-  - **Purpose:** Update an item in the shopping list (e.g., check it off).
-  - **Request Shape:** `{ "checked": true }`
-  - **Response Shape:** The updated `ShoppingListItem` object.
+# 4️⃣ Data Model (MongoDB Atlas)
 
-### 4️⃣ Data Model (MongoDB Atlas)
-- **Collection:** `users`
-  - `_id`: ObjectId (required)
-  - `email`: String (required, unique)
-  - `hashed_password`: String (required)
-  - `profile`: Embedded Document (default: `{}`)
-    - `weeklyBudget`: Number
-    - `dietaryRestrictions`: Array of Strings
-    - `otherDietaryRestrictions`: String
-  - **Example:**
-    ```json
-    {
-      "_id": "60c72b2f9b1e8b3b4c8b4567",
-      "email": "test@example.com",
-      "hashed_password": "...",
-      "profile": {
-        "weeklyBudget": 75,
-        "dietaryRestrictions": ["vegetarian"]
-      }
+### `users` collection
+- `_id`: ObjectId (auto-generated)
+- `email`: string (required, unique)
+- `password`: string (required, hashed)
+- `profile`:
+    - `dietaryRestrictions`: array of strings
+    - `weeklyBudget`: number
+    - `otherDietaryRestrictions`: string
+- **Example:**
+  ```json
+  {
+    "_id": "ObjectId('...')",
+    "email": "test@example.com",
+    "password": "hashed_password",
+    "profile": {
+      "dietaryRestrictions": ["vegetarian"],
+      "weeklyBudget": 50,
+      "otherDietaryRestrictions": ""
     }
-    ```
+  }
+  ```
 
-- **Collection:** `meals`
-  - `_id`: ObjectId (required)
-  - `name`: String (required)
-  - `portionSize`: String
-  - `ingredients`: Array of Embedded Documents
-    - `item`: String
-    - `quantity`: String
-  - `dietaryTags`: Array of Strings
-  - **Example:**
-    ```json
-    {
-      "_id": "60c72b2f9b1e8b3b4c8b4568",
-      "name": "Lentil Soup",
-      "portionSize": "4",
-      "ingredients": [{"item": "Lentils", "quantity": "1 cup"}],
-      "dietaryTags": ["vegan", "gluten-free"]
-    }
-    ```
+### `meals` collection
+- `_id`: ObjectId (auto-generated)
+- `name`: string (required)
+- `recipe`: string
+- `ingredients`: array of embedded objects (`{ "item": "Tofu", "quantity": "1 block" }`)
+- `portionSize`: number
+- `tags`: array of strings (e.g., "vegetarian", "gluten-free")
+- **Example:**
+  ```json
+  {
+    "_id": "ObjectId('...')",
+    "name": "Vegetable Stir-fry with Tofu",
+    "recipe": "...",
+    "ingredients": [{"item": "Tofu", "quantity": "1 block"}],
+    "portionSize": 2,
+    "tags": ["vegetarian", "vegan"]
+  }
+  ```
 
-- **Collection:** `meal_plans`
-  - `_id`: ObjectId (required)
-  - `userId`: ObjectId (required, ref: `users`)
-  - `week`: String (required, e.g., "2025-W44")
-  - `meals`: Array of Embedded Documents
-    - `day`: String
-    - `breakfast`: ObjectId (ref: `meals`)
-    - `lunch`: ObjectId (ref: `meals`)
-    - `dinner`: ObjectId (ref: `meals`)
-  - `shoppingList`: Array of Embedded Documents
-    - `id`: String (UUID)
-    - `item`: String
-    - `quantity`: String
-    - `checked`: Boolean
-  - **Example:**
-    ```json
-    {
-      "_id": "60c72b2f9b1e8b3b4c8b4569",
-      "userId": "60c72b2f9b1e8b3b4c8b4567",
-      "week": "2025-W44",
-      "meals": [{"day": "Monday", "breakfast": "60c72b2f9b1e8b3b4c8b4568"}],
-      "shoppingList": [{"id": "uuid-123", "item": "Lentils", "quantity": "1 cup", "checked": false}]
-    }
-    ```
+### `meal_plans` collection
+- `_id`: ObjectId (auto-generated)
+- `userId`: ObjectId (reference to `users`)
+- `week`: string
+- `meals`: array of objects (`{ "day": "Monday", "breakfast": ObjectId, "lunch": ObjectId, "dinner": ObjectId }`)
+- **Example:**
+  ```json
+  {
+    "_id": "ObjectId('...')",
+    "userId": "ObjectId('...')",
+    "week": "Current Week",
+    "meals": [
+      { "day": "Monday", "breakfast": "ObjectId('...')", "lunch": "ObjectId('...')", "dinner": "ObjectId('...')" }
+    ]
+  }
+  ```
 
-### 5️⃣ Frontend Audit & Feature Map
-- **Component:** `UserProfileSetup.tsx`
-  - **Purpose:** Onboard user by collecting dietary and budget info.
-  - **Endpoint:** `PUT /api/v1/profile`
-  - **Models:** `User`, `Profile`
+### `shopping_lists` collection
+- `_id`: ObjectId (auto-generated)
+- `userId`: ObjectId (reference to `users`)
+- `items`: array of objects (`{ "id": "uuid", "item": "Milk", "quantity": "1 gallon", "store": "Local Grocer", "price": 3.50, "checked": false }`)
+- **Example:**
+  ```json
+  {
+    "_id": "ObjectId('...')",
+    "userId": "ObjectId('...')",
+    "items": [
+      { "id": "...", "item": "Milk", "quantity": "1 gallon", "store": "Local Grocer", "price": 3.50, "checked": false }
+    ]
+  }
+  ```
+
+# 5️⃣ Frontend Audit & Feature Map
+
+- **`UserProfileSetup.tsx`**
+  - **Purpose:** Onboard user by collecting dietary preferences and budget.
+  - **Data Needed:** User profile data.
+  - **Endpoint(s):** `PUT /api/v1/profile`
+  - **Model(s):** `users` (embedded profile)
   - **Auth:** Required.
 
-- **Component:** `MealPlanGenerator.tsx`
-  - **Purpose:** Main dashboard for viewing and managing the meal plan and shopping list.
-  - **Endpoints:**
-    - `POST /api/v1/meal-plan/generate`
-    - `GET /api/v1/meal-plan`
-    - `POST /api/v1/meal-plan/swap`
-    - `POST /api/v1/meal-plan/remove`
-    - `POST /api/v1/shopping-list/item`
-    - `DELETE /api/v1/shopping-list/item/{item_id}`
-    - `PATCH /api/v1/shopping-list/item/{item_id}`
-  - **Models:** `MealPlan`, `Meal`, `ShoppingListItem`
+- **`MealPlanGenerator.tsx`**
+  - **Purpose:** Display and manage the weekly meal plan and shopping list.
+  - **Data Needed:** Meal plan, shopping list, available meals.
+  - **Endpoint(s):** `GET /api/v1/meal-plan`, `POST /api/v1/meal-plan/generate`, `PUT /api/v1/meal-plan`, `GET /api/v1/shopping-list`, `PUT /api/v1/shopping-list`
+  - **Model(s):** `meal_plans`, `shopping_lists`, `meals`
   - **Auth:** Required.
 
-### 6️⃣ Configuration & ENV Vars
+# 6️⃣ Configuration & ENV Vars
+
 - `APP_ENV`: `development` or `production`
 - `PORT`: `8000`
-- `MONGODB_URI`: MongoDB Atlas connection string.
-- `JWT_SECRET`: Secret key for signing JWTs.
-- `JWT_EXPIRES_IN`: `1800` (30 minutes in seconds).
-- `CORS_ORIGINS`: Frontend URL (e.g., `http://localhost:5173`).
+- `MONGODB_URI`: MongoDB Atlas connection string
+- `JWT_SECRET`: A long, random string for signing JWTs
+- `JWT_EXPIRES_IN`: `86400` (24 hours in seconds)
+- `CORS_ORIGINS`: The frontend URL (e.g., `http://localhost:5173`)
 
-### 7️⃣ Testing Strategy (Manual via Frontend)
-- All validation will be performed through the frontend UI.
-- Every task includes a **Manual Test Step** and a **User Test Prompt**.
-- After all tasks in a sprint pass, the code will be committed and pushed to `main`.
+# 7️⃣ Background Work
 
-### 8️⃣ Dynamic Sprint Plan & Backlog
+- None required for the MVP.
+
+# 8️⃣ Integrations
+
+- None required for the MVP.
+
+# 9️⃣ Testing Strategy (Manual via Frontend)
+
+- All backend functionality will be validated by interacting with the frontend UI.
+- Every task in the sprint plan includes a **Manual Test Step** and a **User Test Prompt**.
+- After all tasks in a sprint are completed and tested, the code will be committed and pushed to the `main` branch.
+
+# 🔟 Dynamic Sprint Plan & Backlog
 
 ---
 
-### S0 – Environment Setup & Frontend Connection
+## S0 – Environment Setup & Frontend Connection
 
 **Objectives:**
-- Create a FastAPI skeleton with `/api/v1` and `/healthz`.
-- Connect to MongoDB Atlas using `MONGODB_URI`.
-- `/healthz` performs a DB ping and returns a JSON status.
-- Enable CORS for the frontend.
-- Replace dummy API URLs in the frontend with real backend URLs.
-- Initialize Git at the root, set the default branch to `main`, and push to GitHub.
-- Create a single `.gitignore` file at the root.
+- Create a basic FastAPI application with `/api/v1` base path and a `/healthz` endpoint.
+- Connect to MongoDB Atlas using the `MONGODB_URI`.
+- The `/healthz` endpoint should perform a database ping.
+- Enable CORS for the frontend URL.
+- Initialize a Git repository, set the default branch to `main`, and create a `.gitignore` file.
 
 **Definition of Done:**
-- Backend runs locally and connects to MongoDB Atlas.
-- `/healthz` returns a success status.
-- Frontend can successfully call the `/healthz` endpoint.
-- The repository is live on GitHub on the `main` branch.
+- The backend runs locally and successfully connects to MongoDB Atlas.
+- The `/healthz` endpoint returns a success status.
+- The frontend can make requests to the backend.
+- The repository is on GitHub with the initial setup in the `main` branch.
 
 **Manual Test Step:**
-- Run the backend, open the frontend, and check the browser's Network tab for a successful `200 OK` response from `/api/v1/healthz`.
+- Run the backend, open the frontend, and check the browser's Network tab. The call to `/healthz` should return a 200 OK status with a success message.
 
 **User Test Prompt:**
-> "Start the backend and refresh the app. Confirm that the status shows a successful DB connection in the browser's developer console."
+> "Start the backend and refresh the app. Confirm that the network tab shows a successful call to the `/healthz` endpoint."
 
 ---
 
-### S1 – Basic Auth & Profile Setup
+## S1 – Basic Auth (Signup / Login) & Profile Setup
 
 **Objectives:**
 - Implement JWT-based signup and login.
-- Protect the profile and meal plan routes.
-- Allow users to save their profile information.
+- Store user data in the `users` collection with a hashed password.
+- Create an endpoint to get the current user's data (`/auth/me`).
+- Create an endpoint to save/update the user's profile.
+- Protect the profile and meal plan pages on the frontend.
 
 **Tasks:**
-- **Implement User Signup:**
-  - Create the `POST /api/v1/auth/signup` endpoint.
-  - Store the user in the `users` collection with a hashed password.
-  - **Manual Test Step:** Use a UI form to sign up. A success message should be visible, and a JWT should be stored.
-  - **User Test Prompt:** "Create a new account and verify you are logged in."
+- **Implement `POST /auth/signup`:**
+  - **Manual Test Step:** Use a tool like Postman or curl to create a new user. Check the database to confirm the user was created with a hashed password.
+  - **User Test Prompt:** "Create a new user account using an API client and verify it's in the database."
 
-- **Implement User Login:**
-  - Create the `POST /api/v1/auth/login` endpoint.
-  - Issue a JWT upon successful authentication.
-  - **Manual Test Step:** Log in via the UI. The user should be redirected to the main app page.
-  - **User Test Prompt:** "Log in with your new account and confirm you are taken to the meal planner."
+- **Implement `POST /auth/login`:**
+  - **Manual Test Step:** Use an API client to log in with the new user. A JWT should be returned.
+  - **User Test Prompt:** "Log in with the created user via an API client and confirm you receive a JWT."
 
-- **Implement Profile Update:**
-  - Create the `PUT /api/v1/profile` endpoint.
-  - Update the user's profile in the database.
-  - **Manual Test Step:** Fill out and submit the profile setup form. The data should be saved and reflected in subsequent actions.
-  - **User Test Prompt:** "Set your dietary preferences and budget, save the profile, and confirm the settings are saved."
+- **Implement `GET /auth/me` and `PUT /profile`:**
+  - **Manual Test Step:** Use the JWT from login to fetch the user's data and then update their profile.
+  - **User Test Prompt:** "Using the JWT, fetch the user's data and then update their profile information."
+
+- **Integrate Auth and Profile with Frontend:**
+  - **Manual Test Step:** Replace the frontend's `localStorage` logic for profile management with API calls to the backend. The app should now require login to see the meal planner.
+  - **User Test Prompt:** "The app should now require you to log in. After logging in, your profile information should be fetched from the backend."
 
 **Definition of Done:**
-- The full authentication and profile setup flow works end-to-end in the frontend.
-- **Post-sprint:** Commit and push to `main`.
+- Users can sign up, log in, and have their session managed with JWTs.
+- User profile data is persisted in the database.
+- The frontend uses the backend for authentication and profile management.
+
+**Post-sprint:**
+- Commit and push to `main`.
 
 ---
 
-### S2 – Meal Plan Management
+## S2 – Meal and Meal Plan Management
 
 **Objectives:**
-- Implement the core meal plan generation and management logic.
-- Connect the meal plan features to the frontend UI.
+- Create a `meals` collection and populate it with the mock meal data.
+- Implement the `POST /meal-plan/generate` endpoint to create a meal plan based on the user's profile.
+- Implement `GET /meal-plan` to retrieve the user's current meal plan.
+- Implement `PUT /meal-plan` to handle swapping and removing meals.
 
 **Tasks:**
-- **Generate Meal Plan:**
-  - Create the `POST /api/v1/meal-plan/generate` endpoint.
-  - Implement logic to create a 7-day meal plan based on the user's profile.
-  - **Manual Test Step:** Click the "Generate New Weekly Plan" button. A full 7-day meal plan should appear.
-  - **User Test Prompt:** "Generate a new meal plan and verify that a full week of meals is displayed."
+- **Seed the `meals` collection:**
+  - **Manual Test Step:** Write a script to insert the mock meal data into the `meals` collection in MongoDB. Verify the data in the Atlas UI.
+  - **User Test Prompt:** "Run the seeding script and confirm the meals are present in the database."
 
-- **Swap and Remove Meals:**
-  - Implement the `POST /api/v1/meal-plan/swap` and `POST /api/v1/meal-plan/remove` endpoints.
-  - **Manual Test Step:** Use the swap and remove buttons on a meal card. The UI should update to show the new or removed meal.
-  - **User Test Prompt:** "Swap a meal for a different one, then remove another meal. Confirm the UI updates correctly."
+- **Implement Meal Plan Generation and Retrieval:**
+  - **Manual Test Step:** Log in to the frontend and click "Generate New Weekly Plan". The plan should be generated and displayed, and the data should be saved in the `meal_plans` collection. Refreshing the page should show the same plan.
+  - **User Test Prompt:** "Generate a meal plan. It should appear on the screen and persist after a page refresh."
+
+- **Implement Meal Swapping/Removal:**
+  - **Manual Test Step:** In the frontend, swap a meal and remove another. The changes should be reflected on the screen and updated in the database.
+  - **User Test Prompt:** "Swap and remove meals from your plan. The changes should be saved and persist."
 
 **Definition of Done:**
-- Users can generate, swap, and remove meals, and the changes are reflected in the UI.
-- **Post-sprint:** Commit and push to `main`.
+- The backend can generate and serve meal plans based on user preferences.
+- The frontend is fully integrated with the meal plan endpoints.
+
+**Post-sprint:**
+- Commit and push to `main`.
 
 ---
 
-### S3 – Shopping List Management
+## S3 – Shopping List Management
 
 **Objectives:**
-- Implement shopping list generation and management.
-- Connect the shopping list features to the frontend UI.
+- When a meal plan is generated, also generate a shopping list and save it.
+- Implement `GET /shopping-list` to retrieve the user's shopping list.
+- Implement `PUT /shopping-list` to handle adding, removing, and toggling items.
 
 **Tasks:**
-- **Generate Shopping List:**
-  - The shopping list should be generated and updated automatically whenever the meal plan changes.
-  - **Manual Test Step:** After generating or modifying a meal plan, check the shopping list. It should contain the correct ingredients.
-  - **User Test Prompt:** "After generating a meal plan, check the shopping list to ensure it's populated with ingredients."
+- **Implement Shopping List Generation:**
+  - **Manual Test Step:** When a meal plan is generated in the frontend, a corresponding shopping list should be created in the `shopping_lists` collection.
+  - **User Test Prompt:** "Generate a new meal plan and verify that a shopping list is created for it in the database."
 
-- **Manage Shopping List Items:**
-  - Implement the `POST`, `DELETE`, and `PATCH` endpoints for shopping list items.
-  - **Manual Test Step:** Add a new item, check an item off, and delete an item using the UI controls. The list should update accordingly.
-  - **User Test Prompt:** "Add a custom item to your shopping list, mark an item as complete, and then delete an item. Verify all actions work as expected."
+- **Implement Shopping List Updates:**
+  - **Manual Test Step:** In the frontend, add a new item to the shopping list, remove an item, and check/uncheck an item. All changes should be persisted in the database and reflected after a page refresh.
+  - **User Test Prompt:** "Modify your shopping list (add, remove, check items). The changes should be saved and persist."
 
 **Definition of Done:**
-- The shopping list is automatically generated and can be manually managed by the user through the UI.
-- **Post-sprint:** Commit and push to `main`.
+- The shopping list is automatically generated with the meal plan.
+- All shopping list modifications in the frontend are saved to the backend.
+
+**Post-sprint:**
+- Commit and push to `main`.
