@@ -134,27 +134,54 @@ def get_password_hash(password):
     Hash a password using bcrypt.
     Bcrypt has a 72-byte limit - passwords longer than this will be truncated.
     """
-    # Ensure password is a string
-    if not isinstance(password, str):
+    # Ensure password is a string (handle bytes, None, etc.)
+    if password is None:
+        raise ValueError("Password cannot be None")
+    
+    if isinstance(password, bytes):
+        # If it's bytes, decode it to string first
+        try:
+            password = password.decode('utf-8')
+        except UnicodeDecodeError:
+            raise ValueError("Password bytes could not be decoded as UTF-8")
+    elif not isinstance(password, str):
         password = str(password)
     
     # Bcrypt limit is 72 bytes - truncate if necessary
-    # Use a safe approach: truncate the string character by character until we're under 72 bytes
+    # Encode to bytes to check actual byte length (not character length)
     password_bytes = password.encode('utf-8')
+    
     if len(password_bytes) > 72:
-        # Truncate character by character to avoid cutting multi-byte characters in half
-        truncated = password
-        while len(truncated.encode('utf-8')) > 72:
-            truncated = truncated[:-1]
-        password = truncated
+        # Truncate to exactly 72 bytes
+        # This may cut a multi-byte character in half, so we need to handle that
+        password_bytes = password_bytes[:72]
+        # Decode back to string, handling any incomplete multi-byte sequences
+        # Use 'ignore' to skip any incomplete characters at the end
+        password = password_bytes.decode('utf-8', errors='ignore')
+        
+        # Verify the final byte length is <= 72
+        final_bytes = password.encode('utf-8')
+        if len(final_bytes) > 72:
+            # If somehow still > 72, truncate again (shouldn't happen, but safety check)
+            password = final_bytes[:72].decode('utf-8', errors='ignore')
+    
+    # Final verification: ensure password when encoded is <= 72 bytes
+    # This is critical - bcrypt will fail if this isn't true
+    final_check = password.encode('utf-8')
+    if len(final_check) > 72:
+        # Emergency truncation - this should never happen, but if it does, truncate directly
+        password = final_check[:72].decode('utf-8', errors='ignore')
     
     # Now hash - this should never fail since we're guaranteed to be <= 72 bytes
     try:
         return pwd_context.hash(password)
     except Exception as e:
         # If it still fails, log it and re-raise with more context
+        final_bytes_check = password.encode('utf-8')
         print(f"[HASH ERROR] Failed to hash password: {e}")
-        print(f"[HASH ERROR] Password length: {len(password)} chars, {len(password.encode('utf-8'))} bytes")
+        print(f"[HASH ERROR] Password length: {len(password)} chars, {len(final_bytes_check)} bytes")
+        print(f"[HASH ERROR] Password type: {type(password)}")
+        print(f"[HASH ERROR] Password (first 20 chars): {password[:20] if len(password) > 20 else password}")
         raise
 
 def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
@@ -394,6 +421,12 @@ async def signup(request: Request, response: Response):
         # Simple password validation - minimum 6 characters
         if len(user.password) < 6:
             raise HTTPException(status_code=400, detail="Password must be at least 6 characters long")
+        
+        # Log password details for debugging (before hashing)
+        password_type = type(user.password).__name__
+        password_length = len(user.password) if isinstance(user.password, str) else 'N/A'
+        password_bytes_length = len(user.password.encode('utf-8')) if isinstance(user.password, str) else 'N/A'
+        print(f"[SIGNUP] Password type: {password_type}, length: {password_length} chars, {password_bytes_length} bytes")
         
         # Hash the password - get_password_hash handles truncation to 72 bytes automatically
         # Just hash it directly - no need for complex error handling
