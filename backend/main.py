@@ -123,7 +123,7 @@ def save_users(users):
 users_db = load_users()
 
 # --- Security ---
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+pwd_context = CryptContext(schemes=["pbkdf2_sha256"], deprecated="auto")
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login")
 
 def verify_password(plain_password, hashed_password):
@@ -131,8 +131,8 @@ def verify_password(plain_password, hashed_password):
 
 def get_password_hash(password):
     """
-    Hash a password using bcrypt.
-    Bcrypt has a 72-byte limit - passwords longer than this will be truncated.
+    Hash a password using pbkdf2_sha256.
+    pbkdf2_sha256 doesn't have the 72-byte limit that bcrypt has.
     """
     # Ensure password is a string (handle bytes, None, etc.)
     if password is None:
@@ -147,39 +147,14 @@ def get_password_hash(password):
     elif not isinstance(password, str):
         password = str(password)
     
-    # Bcrypt limit is 72 bytes - truncate if necessary
-    # Encode to bytes to check actual byte length (not character length)
-    password_bytes = password.encode('utf-8')
-    
-    if len(password_bytes) > 72:
-        # Truncate to exactly 72 bytes
-        # This may cut a multi-byte character in half, so we need to handle that
-        password_bytes = password_bytes[:72]
-        # Decode back to string, handling any incomplete multi-byte sequences
-        # Use 'ignore' to skip any incomplete characters at the end
-        password = password_bytes.decode('utf-8', errors='ignore')
-        
-        # Verify the final byte length is <= 72
-        final_bytes = password.encode('utf-8')
-        if len(final_bytes) > 72:
-            # If somehow still > 72, truncate again (shouldn't happen, but safety check)
-            password = final_bytes[:72].decode('utf-8', errors='ignore')
-    
-    # Final verification: ensure password when encoded is <= 72 bytes
-    # This is critical - bcrypt will fail if this isn't true
-    final_check = password.encode('utf-8')
-    if len(final_check) > 72:
-        # Emergency truncation - this should never happen, but if it does, truncate directly
-        password = final_check[:72].decode('utf-8', errors='ignore')
-    
-    # Now hash - this should never fail since we're guaranteed to be <= 72 bytes
+    # pbkdf2_sha256 doesn't have a length limit like bcrypt, so no truncation needed
     try:
         return pwd_context.hash(password)
     except Exception as e:
-        # If it still fails, log it and re-raise with more context
-        final_bytes_check = password.encode('utf-8')
+        # Log error details for debugging
+        password_bytes_length = len(password.encode('utf-8')) if isinstance(password, str) else 'N/A'
         print(f"[HASH ERROR] Failed to hash password: {e}")
-        print(f"[HASH ERROR] Password length: {len(password)} chars, {len(final_bytes_check)} bytes")
+        print(f"[HASH ERROR] Password length: {len(password)} chars, {password_bytes_length} bytes")
         print(f"[HASH ERROR] Password type: {type(password)}")
         print(f"[HASH ERROR] Password (first 20 chars): {password[:20] if len(password) > 20 else password}")
         raise
