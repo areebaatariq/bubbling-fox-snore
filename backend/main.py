@@ -21,7 +21,7 @@ SECRET_KEY = os.getenv("SECRET_KEY", "a_very_secret_key")
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 30
 PORT = int(os.getenv("PORT", 8000))
-FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:5137")
+FRONTEND_URL = os.getenv("FRONTEND_URL", "https://demo-frontend-8jn6.onrender.com")
 BACKEND_URL = os.getenv("BACKEND_URL", f"http://localhost:{PORT}")
 
 # Get the directory where this file is located
