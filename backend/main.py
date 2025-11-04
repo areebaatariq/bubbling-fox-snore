@@ -106,10 +106,16 @@ def load_users():
 
 def save_users(users):
     try:
+        # Ensure the directory exists
+        USERS_JSON_PATH.parent.mkdir(parents=True, exist_ok=True)
         with open(USERS_JSON_PATH, "w") as f:
             json.dump(users, f, indent=2)
     except Exception as e:
+        import traceback
         print(f"Error saving users.json: {e}")
+        traceback.print_exc()
+        # Re-raise so caller can handle it
+        raise
 
 users_db = load_users()
 
@@ -198,13 +204,16 @@ class OptionsMiddleware(BaseHTTPMiddleware):
 app.add_middleware(OptionsMiddleware)
 
 # CORS configuration - must be before route definitions
-# Get allowed origins from environment, default to frontend URL or "*" for all
-cors_origins = os.getenv("CORS_ORIGINS", FRONTEND_URL)
+# Get allowed origins from environment, default to "*" for all origins
+cors_origins = os.getenv("CORS_ORIGINS", "*")
 if cors_origins == "*":
     allow_origins_list = ["*"]
 else:
     # Split comma-separated origins if multiple are provided
     allow_origins_list = [origin.strip() for origin in cors_origins.split(",")]
+    # Always include the frontend URL if not already in the list
+    if FRONTEND_URL not in allow_origins_list:
+        allow_origins_list.append(FRONTEND_URL)
 
 app.add_middleware(
     CORSMiddleware,
@@ -242,19 +251,41 @@ async def get_current_user(token: str = Depends(oauth2_scheme)):
 
 
 # --- API Endpoints ---
+@app.options("/api/v1/auth/signup")
+async def options_signup(response: Response):
+    response.headers["Access-Control-Allow-Origin"] = "*"
+    response.headers["Access-Control-Allow-Methods"] = "POST, OPTIONS"
+    response.headers["Access-Control-Allow-Headers"] = "Content-Type"
+    response.headers["Access-Control-Max-Age"] = "3600"
+    response.status_code = 200
+    return {}
+
 @app.post("/api/v1/auth/signup", status_code=status.HTTP_201_CREATED)
-async def signup(user: UserCreate):
-    if user.email in users_db:
-        raise HTTPException(status_code=400, detail="Email already registered")
-    
-    # Validate password strength
-    if len(user.password) < 6:
-        raise HTTPException(status_code=400, detail="Password must be at least 6 characters long")
-    
-    hashed_password = get_password_hash(user.password)
-    users_db[user.email] = {"email": user.email, "hashed_password": hashed_password}
-    save_users(users_db)
-    return {"message": "User created successfully", "email": user.email}
+async def signup(user: UserCreate, response: Response):
+    try:
+        # Add CORS headers to response
+        response.headers["Access-Control-Allow-Origin"] = "*"
+        response.headers["Access-Control-Allow-Methods"] = "POST, OPTIONS"
+        response.headers["Access-Control-Allow-Headers"] = "Content-Type"
+        
+        if user.email in users_db:
+            raise HTTPException(status_code=400, detail="Email already registered")
+        
+        # Validate password strength
+        if len(user.password) < 6:
+            raise HTTPException(status_code=400, detail="Password must be at least 6 characters long")
+        
+        hashed_password = get_password_hash(user.password)
+        users_db[user.email] = {"email": user.email, "hashed_password": hashed_password}
+        save_users(users_db)
+        return {"message": "User created successfully", "email": user.email}
+    except HTTPException:
+        raise
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        print(f"Signup error: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
 
 @app.post("/api/v1/auth/login", response_model=Token)
 async def login(form_data: OAuth2PasswordRequestForm = Depends()):
