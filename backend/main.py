@@ -23,10 +23,9 @@ SECRET_KEY = os.getenv("SECRET_KEY", "a_very_secret_key")
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 30
 PORT = int(os.getenv("PORT", 8000))
-# In production, set FRONTEND_URL environment variable (e.g., https://demo-frontend-8jn6.onrender.com)
-# For development, defaults to localhost
-FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:5137")
-BACKEND_URL = os.getenv("BACKEND_URL", f"http://localhost:{PORT}")
+# Production URLs (hardcoded)
+FRONTEND_URL = "https://demo-frontend-8jn6.onrender.com"
+BACKEND_URL = "https://demo-backend-53z8.onrender.com"
 
 # Get the directory where this file is located
 BASE_DIR = Path(__file__).parent
