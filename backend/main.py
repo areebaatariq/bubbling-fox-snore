@@ -1,11 +1,12 @@
 import os
-from fastapi import FastAPI, HTTPException, Depends, status, Response, Request
+import json
+from fastapi import FastAPI, HTTPException, Depends, status, Response
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.base import BaseHTTPMiddleware
-import json
+from starlette.requests import Request
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from dotenv import load_dotenv
-from pydantic import BaseModel, EmailStr, Field
+from pydantic import BaseModel, EmailStr
 from passlib.context import CryptContext
 from jose import JWTError, jwt
 from datetime import datetime, timedelta
@@ -19,6 +20,9 @@ load_dotenv()
 SECRET_KEY = os.getenv("SECRET_KEY", "a_very_secret_key")
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 30
+PORT = int(os.getenv("PORT", 8000))
+FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:5137")
+BACKEND_URL = os.getenv("BACKEND_URL", f"http://localhost:{PORT}")
 
 # Get the directory where this file is located
 BASE_DIR = Path(__file__).parent
@@ -194,9 +198,17 @@ class OptionsMiddleware(BaseHTTPMiddleware):
 app.add_middleware(OptionsMiddleware)
 
 # CORS configuration - must be before route definitions
+# Get allowed origins from environment, default to frontend URL or "*" for all
+cors_origins = os.getenv("CORS_ORIGINS", FRONTEND_URL)
+if cors_origins == "*":
+    allow_origins_list = ["*"]
+else:
+    # Split comma-separated origins if multiple are provided
+    allow_origins_list = [origin.strip() for origin in cors_origins.split(",")]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Allow all origins for CORS preflight
+    allow_origins=allow_origins_list,  # Use environment variable or default to frontend URL
     allow_credentials=False,  # Set to False when using "*"
     allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],  # Explicitly include all methods
     allow_headers=["*"],  # Allow all headers
@@ -208,24 +220,44 @@ app.add_middleware(
 # Explicit handlers are added as fallback to ensure compatibility
 
 # --- Dependency ---
-# No authentication required - use default session
-def get_default_user():
-    # Use a default session ID for storing data
-    return {"email": "default@session.local"}
+async def get_current_user(token: str = Depends(oauth2_scheme)):
+    credentials_exception = HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Could not validate credentials",
+        headers={"WWW-Authenticate": "Bearer"},
+    )
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        email: str = payload.get("sub")
+        if email is None:
+            raise credentials_exception
+        token_data = TokenData(email=email)
+    except JWTError:
+        raise credentials_exception
+    
+    user = users_db.get(token_data.email)
+    if user is None:
+        raise credentials_exception
+    return user
+
 
 # --- API Endpoints ---
 @app.post("/api/v1/auth/signup", status_code=status.HTTP_201_CREATED)
-def signup(user: UserCreate):
+async def signup(user: UserCreate):
     if user.email in users_db:
         raise HTTPException(status_code=400, detail="Email already registered")
+    
+    # Validate password strength
+    if len(user.password) < 6:
+        raise HTTPException(status_code=400, detail="Password must be at least 6 characters long")
     
     hashed_password = get_password_hash(user.password)
     users_db[user.email] = {"email": user.email, "hashed_password": hashed_password}
     save_users(users_db)
-    return {"message": "User created successfully"}
+    return {"message": "User created successfully", "email": user.email}
 
 @app.post("/api/v1/auth/login", response_model=Token)
-def login(form_data: OAuth2PasswordRequestForm = Depends()):
+async def login(form_data: OAuth2PasswordRequestForm = Depends()):
     user = users_db.get(form_data.username)
     if not user or not verify_password(form_data.password, user["hashed_password"]):
         raise HTTPException(
@@ -250,10 +282,10 @@ def check_health():
         raise HTTPException(status_code=500, detail=f"An error occurred: {e}")
 
 @app.get("/api/v1/auth/me")
-async def read_users_me():
-    return {"email": "default@session.local"}
+async def read_users_me(current_user: dict = Depends(get_current_user)):
+    return {"email": current_user["email"]}
 
-# Explicit OPTIONS handler for profile endpoint (more specific, defined first)
+# Explicit OPTIONS handler for profile endpoint (must be before PUT/GET)
 @app.options("/api/v1/profile")
 async def options_profile(response: Response):
     response.headers["Access-Control-Allow-Origin"] = "*"
@@ -274,17 +306,16 @@ async def options_handler(full_path: str, response: Response):
     return {}
 
 @app.put("/api/v1/profile")
-async def update_profile(profile: UserProfile, response: Response):
+async def update_profile(profile: UserProfile, response: Response, current_user: dict = Depends(get_current_user)):
     response.headers["Access-Control-Allow-Origin"] = "*"
     response.headers["Access-Control-Allow-Methods"] = "GET, PUT, OPTIONS"
     response.headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization"
-    user = get_default_user()
-    user_email = user["email"]
+    user_email = current_user["email"]
     if user_email not in users_db:
         users_db[user_email] = {}
     if "profile" not in users_db[user_email]:
         users_db[user_email]["profile"] = {}
-    users_db[user_email]["profile"].update(profile.dict(exclude_unset=True))
+    users_db[user_email]["profile"].update(profile.model_dump(exclude_unset=True))
     save_users(users_db)
     # Return the updated profile in frontend format
     profile_data = users_db[user_email].get("profile", {})
@@ -295,22 +326,33 @@ async def update_profile(profile: UserProfile, response: Response):
     }
 
 @app.get("/api/v1/profile")
-async def get_profile():
-    user = get_default_user()
-    user_email = user["email"]
+async def get_profile(current_user: dict = Depends(get_current_user)):
+    user_email = current_user["email"]
     profile_data = users_db.get(user_email, {}).get("profile", {})
     # Return in frontend format
+    # Check if profile actually exists (not just empty dict)
+    # If profile_data is empty or doesn't exist, return 0 for weeklyBudget to indicate no profile
+    if not profile_data or len(profile_data) == 0:
+        # No profile exists - return values that indicate no profile setup
+        return {
+            "dietaryRestrictions": [],
+            "otherDietaryRestrictions": "",
+            "weeklyBudget": 0
+        }
+    # Profile exists - return actual values
+    weekly_budget = profile_data.get("weekly_budget")
+    if weekly_budget is None:
+        weekly_budget = 0  # Return 0 if weekly_budget wasn't set (shouldn't happen if profile exists)
     return {
         "dietaryRestrictions": profile_data.get("dietary_preferences", []),
         "otherDietaryRestrictions": profile_data.get("other_dietary_restrictions", ""),
-        "weeklyBudget": profile_data.get("weekly_budget", 50)
+        "weeklyBudget": weekly_budget
     }
 
 @app.post("/api/v1/meal-plan/generate")
-async def generate_meal_plan():
+async def generate_meal_plan(current_user: dict = Depends(get_current_user)):
     # Generate a weekly meal plan (7 days)
-    user = get_default_user()
-    user_email = user["email"]
+    user_email = current_user["email"]
     if user_email not in users_db:
         users_db[user_email] = {}
     user_profile = users_db.get(user_email, {}).get("profile", {})
@@ -349,7 +391,7 @@ async def generate_meal_plan():
         for meal_type in meal_types:
             if available_meals:
                 selected_meal = random.choice(available_meals)
-                day_plan[meal_type] = Meal(**selected_meal).dict()
+                day_plan[meal_type] = Meal(**selected_meal).model_dump()
         weekly_plan.append(day_plan)
     
     # Store the generated meal plan
@@ -384,23 +426,21 @@ async def generate_meal_plan():
         )
     
     users_db[user_email]["shopping_list"] = [
-        item.dict() for item in shopping_list_items
+        item.model_dump() for item in shopping_list_items
     ]
     save_users(users_db)
     
     return {"meals": weekly_plan}
 
 @app.get("/api/v1/meal-plan")
-async def get_meal_plan():
-    user = get_default_user()
-    user_email = user["email"]
+async def get_meal_plan(current_user: dict = Depends(get_current_user)):
+    user_email = current_user["email"]
     meal_plan_data = users_db.get(user_email, {}).get("meal_plan", [])
     return {"meals": meal_plan_data}
 
 @app.put("/api/v1/meal-plan")
-async def update_meal_plan(meal_plan: dict):
-    user = get_default_user()
-    user_email = user["email"]
+async def update_meal_plan(meal_plan: dict, current_user: dict = Depends(get_current_user)):
+    user_email = current_user["email"]
     if user_email not in users_db:
         users_db[user_email] = {}
     users_db[user_email]["meal_plan"] = meal_plan.get("meals", [])
@@ -428,7 +468,7 @@ async def update_meal_plan(meal_plan: dict):
             ShoppingListItem(
                 name=ing["name"],
                 quantity=f'{ing["quantity"]} {ing["unit"]}'.strip(),
-            ).dict()
+            ).model_dump()
         )
     
     users_db[user_email]["shopping_list"] = shopping_list_items
@@ -436,16 +476,14 @@ async def update_meal_plan(meal_plan: dict):
     return {"message": "Meal plan updated successfully"}
 
 @app.get("/api/v1/shopping-list")
-async def get_shopping_list():
-    user = get_default_user()
-    user_email = user["email"]
+async def get_shopping_list(current_user: dict = Depends(get_current_user)):
+    user_email = current_user["email"]
     shopping_list_data = users_db.get(user_email, {}).get("shopping_list", [])
     return {"items": shopping_list_data}
 
 @app.put("/api/v1/shopping-list")
-async def update_shopping_list(shopping_list: dict):
-    user = get_default_user()
-    user_email = user["email"]
+async def update_shopping_list(shopping_list: dict, current_user: dict = Depends(get_current_user)):
+    user_email = current_user["email"]
     if user_email not in users_db:
         users_db[user_email] = {}
     users_db[user_email]["shopping_list"] = shopping_list.get("items", [])
@@ -455,5 +493,4 @@ async def update_shopping_list(shopping_list: dict):
 # For local development - Render uses uvicorn directly
 if __name__ == "__main__":
     import uvicorn
-    port = int(os.getenv("PORT", 8000))
-    uvicorn.run(app, host="0.0.0.0", port=port)
+    uvicorn.run(app, host="0.0.0.0", port=PORT)

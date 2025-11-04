@@ -2,17 +2,14 @@
 
 import React, { useState, useEffect } from "react";
 import { UserProfile, Meal, ShoppingListItem, MealPlan, DayPlan } from "@/types";
-import { API_BASE_URL } from "@/config/api";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-
-const API_BASE = API_BASE_URL;
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { PlusCircle, MinusCircle, RefreshCcw, Trash2 } from "lucide-react";
 import { toast } from "sonner";
-import { v4 as uuidv4 } from 'uuid';
+import apiClient from "@/utils/api";
 
 interface MealPlanGeneratorProps {
   userProfile: UserProfile;
@@ -33,45 +30,35 @@ const MealPlanGenerator: React.FC<MealPlanGeneratorProps> = ({ userProfile }) =>
 
   const fetchMealPlan = async () => {
     try {
-      const response = await fetch(`${API_BASE}/api/v1/meal-plan`);
-      if (response.ok) {
-        const data = await response.json();
-        setMealPlan(data);
-      }
+      const response = await apiClient.get("/meal-plan");
+      setMealPlan(response.data);
     } catch (error) {
       console.error("Failed to fetch meal plan:", error);
+      toast.error("Failed to fetch meal plan.");
     }
   };
 
   const fetchShoppingList = async () => {
     try {
-      const response = await fetch(`${API_BASE}/api/v1/shopping-list`);
-      if (response.ok) {
-        const data = await response.json();
-        setShoppingList(data.items);
-      }
+      const response = await apiClient.get("/shopping-list");
+      setShoppingList(response.data.items || []);
     } catch (error) {
       console.error("Failed to fetch shopping list:", error);
+      toast.error("Failed to fetch shopping list.");
     }
   };
 
   const generateMealPlan = async () => {
     try {
-      const response = await fetch(`${API_BASE}/api/v1/meal-plan/generate`, {
-        method: "POST",
-      });
-      if (response.ok) {
-        const data = await response.json();
-        setMealPlan(data);
-        const newShoppingList = generateShoppingList(data);
-        setShoppingList(newShoppingList);
-        updateShoppingListOnBackend(newShoppingList);
-        toast.success("Weekly meal plan generated!");
-      } else {
-        toast.error("Failed to generate meal plan.");
-      }
-    } catch (error) {
-      toast.error("An error occurred while generating the meal plan.");
+      const response = await apiClient.post("/meal-plan/generate");
+      const data = response.data;
+      setMealPlan(data);
+      const newShoppingList = generateShoppingList(data);
+      setShoppingList(newShoppingList);
+      updateShoppingListOnBackend(newShoppingList);
+      toast.success("Weekly meal plan generated!");
+    } catch (error: any) {
+      toast.error(error.response?.data?.detail || "An error occurred while generating the meal plan.");
     }
   };
 
@@ -141,31 +128,19 @@ const MealPlanGenerator: React.FC<MealPlanGeneratorProps> = ({ userProfile }) =>
     recalculateShoppingList(updatedPlan);
     
     try {
-      await fetch(`${API_BASE}/api/v1/meal-plan`, {
-        method: "PUT",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(updatedPlan),
-      });
+      await apiClient.put("/meal-plan", updatedPlan);
       toast.info(`Removed ${mealType} for ${day}.`);
-    } catch (error) {
-      toast.error("Failed to update meal plan.");
+    } catch (error: any) {
+      toast.error(error.response?.data?.detail || "Failed to update meal plan.");
       // Optionally revert state changes
     }
   };
 
   const updateShoppingListOnBackend = async (updatedList: ShoppingListItem[]) => {
     try {
-      await fetch(`${API_BASE}/api/v1/shopping-list`, {
-        method: "PUT",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ items: updatedList }),
-      });
-    } catch (error) {
-      toast.error("Failed to update shopping list.");
+      await apiClient.put("/shopping-list", { items: updatedList });
+    } catch (error: any) {
+      toast.error(error.response?.data?.detail || "Failed to update shopping list.");
     }
   };
 

@@ -1,7 +1,6 @@
 "use client";
 
 import React from "react";
-import axios from "axios";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
@@ -20,6 +19,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Textarea } from "@/components/ui/textarea";
 import { UserProfile } from "@/types";
 import { toast } from "sonner";
+import apiClient from "@/utils/api";
 
 const dietaryOptions = [
   { id: "vegetarian", label: "Vegetarian" },
@@ -63,15 +63,14 @@ const UserProfileSetup: React.FC<UserProfileSetupProps> = ({
         weekly_budget: values.weeklyBudget,
       };
 
-      const API_URL = `${import.meta.env.VITE_API_URL || "https://demo-backend-h2eq.onrender.com"}/api/v1`;
-      const response = await axios.put(`${API_URL}/profile`, profileData);
+      const response = await apiClient.put("/profile", profileData);
 
       toast.success("Profile saved successfully!");
       // Call onProfileComplete with the response data (already in frontend format)
       onProfileComplete(response.data);
-    } catch (error) {
+    } catch (error: any) {
       console.error("Failed to save profile:", error);
-      toast.error("Failed to save profile. Please try again.");
+      toast.error(error.response?.data?.detail || "Failed to save profile. Please try again.");
     }
   }
 
