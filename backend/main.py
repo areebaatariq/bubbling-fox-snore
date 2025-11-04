@@ -186,7 +186,16 @@ app.add_middleware(
     expose_headers=["*"],
 )
 
-# Add catch-all OPTIONS handler for CORS preflight
+# Add explicit OPTIONS handlers for all API routes
+@app.options("/api/v1/{path:path}")
+async def options_api_handler(path: str, response: Response):
+    response.headers["Access-Control-Allow-Origin"] = "*"
+    response.headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, DELETE, OPTIONS"
+    response.headers["Access-Control-Allow-Headers"] = "*"
+    response.headers["Access-Control-Max-Age"] = "3600"
+    return {"message": "OK"}
+
+# Add catch-all OPTIONS handler as fallback
 @app.options("/{full_path:path}")
 async def options_handler(full_path: str, response: Response):
     response.headers["Access-Control-Allow-Origin"] = "*"
