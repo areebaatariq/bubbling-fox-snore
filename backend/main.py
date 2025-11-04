@@ -211,6 +211,33 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
         headers={"Access-Control-Allow-Origin": "*"}
     )
 
+# Middleware to log CORS and request details for debugging
+class CORSLoggingMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request: Request, call_next):
+        # Log CORS-related headers for all requests
+        origin = request.headers.get("origin", "not set")
+        method = request.method
+        path = str(request.url.path)
+        
+        print(f"[CORS] {method} {path}")
+        print(f"[CORS] Origin: {origin}")
+        print(f"[CORS] Access-Control-Request-Method: {request.headers.get('access-control-request-method', 'not set')}")
+        print(f"[CORS] Access-Control-Request-Headers: {request.headers.get('access-control-request-headers', 'not set')}")
+        
+        response = await call_next(request)
+        
+        # Log CORS response headers
+        cors_origin = response.headers.get("access-control-allow-origin", "not set")
+        cors_methods = response.headers.get("access-control-allow-methods", "not set")
+        cors_headers = response.headers.get("access-control-allow-headers", "not set")
+        
+        print(f"[CORS] Response - Allow-Origin: {cors_origin}")
+        print(f"[CORS] Response - Allow-Methods: {cors_methods}")
+        print(f"[CORS] Response - Allow-Headers: {cors_headers}")
+        print(f"[CORS] Response Status: {response.status_code}")
+        
+        return response
+
 # Middleware to log request details for debugging (without consuming body)
 class RequestLoggingMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
@@ -235,7 +262,10 @@ class OptionsMiddleware(BaseHTTPMiddleware):
         response = await call_next(request)
         return response
 
-# Add custom OPTIONS middleware first
+# Add CORS logging middleware first to see all CORS activity
+app.add_middleware(CORSLoggingMiddleware)
+
+# Add custom OPTIONS middleware
 app.add_middleware(OptionsMiddleware)
 
 # CORS configuration - must be before route definitions
@@ -249,6 +279,10 @@ else:
     # Always include the frontend URL if not already in the list
     if FRONTEND_URL not in allow_origins_list:
         allow_origins_list.append(FRONTEND_URL)
+
+print(f"[CORS CONFIG] CORS_ORIGINS env: {cors_origins}")
+print(f"[CORS CONFIG] FRONTEND_URL: {FRONTEND_URL}")
+print(f"[CORS CONFIG] Allow origins list: {allow_origins_list}")
 
 app.add_middleware(
     CORSMiddleware,
@@ -307,19 +341,16 @@ async def signup(request: Request, response: Response):
         content_type = request.headers.get("content-type", "not set")
         print(f"[SIGNUP] Content-Type: {content_type}")
         
-        # Try to get raw body for logging (but don't consume it)
+        # Parse request body using FastAPI's built-in method
         try:
-            body_bytes = await request.body()
-            print(f"[SIGNUP] Raw body length: {len(body_bytes)} bytes")
-            # Parse JSON from body
-            import json as json_module
-            body = json_module.loads(body_bytes)
+            body = await request.json()
             print(f"[SIGNUP] Parsed body: {body}")
+            print(f"[SIGNUP] Body type: {type(body)}")
         except Exception as e:
-            print(f"[SIGNUP] Error reading body: {e}")
+            print(f"[SIGNUP] Error parsing JSON body: {e}")
             import traceback
             traceback.print_exc()
-            raise HTTPException(status_code=400, detail="Invalid request body")
+            raise HTTPException(status_code=400, detail="Invalid JSON in request body")
         
         # Validate using Pydantic model
         try:
@@ -393,6 +424,25 @@ def check_health():
         return {"status": "ok", "message": "Successfully loaded meals.json"}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"An error occurred: {e}")
+
+@app.get("/api/v1/cors-test")
+async def cors_test(request: Request, response: Response):
+    """Test endpoint to check CORS configuration"""
+    origin = request.headers.get("origin", "not set")
+    return {
+        "status": "ok",
+        "message": "CORS test endpoint",
+        "request_origin": origin,
+        "cors_config": {
+            "allow_origins": allow_origins_list,
+            "frontend_url": FRONTEND_URL,
+            "cors_origins_env": cors_origins
+        },
+        "response_headers": {
+            "access-control-allow-origin": response.headers.get("access-control-allow-origin", "not set"),
+            "access-control-allow-methods": response.headers.get("access-control-allow-methods", "not set"),
+        }
+    }
 
 @app.get("/api/v1/auth/me")
 async def read_users_me(current_user: dict = Depends(get_current_user)):
