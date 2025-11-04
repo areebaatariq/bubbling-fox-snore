@@ -139,11 +139,23 @@ def get_password_hash(password):
         password = str(password)
     
     # Bcrypt limit is 72 bytes - truncate if necessary
+    # Use a safe approach: truncate the string character by character until we're under 72 bytes
     password_bytes = password.encode('utf-8')
     if len(password_bytes) > 72:
-        password = password_bytes[:72].decode('utf-8', errors='ignore')
+        # Truncate character by character to avoid cutting multi-byte characters in half
+        truncated = password
+        while len(truncated.encode('utf-8')) > 72:
+            truncated = truncated[:-1]
+        password = truncated
     
-    return pwd_context.hash(password)
+    # Now hash - this should never fail since we're guaranteed to be <= 72 bytes
+    try:
+        return pwd_context.hash(password)
+    except Exception as e:
+        # If it still fails, log it and re-raise with more context
+        print(f"[HASH ERROR] Failed to hash password: {e}")
+        print(f"[HASH ERROR] Password length: {len(password)} chars, {len(password.encode('utf-8'))} bytes")
+        raise
 
 def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
     to_encode = data.copy()
@@ -383,45 +395,9 @@ async def signup(request: Request, response: Response):
         if len(user.password) < 6:
             raise HTTPException(status_code=400, detail="Password must be at least 6 characters long")
         
-        # Log password details for debugging (don't log the actual password for security)
-        password_length = len(user.password)
-        password_bytes = len(user.password.encode('utf-8'))
-        print(f"[SIGNUP] Password length: {password_length} chars, {password_bytes} bytes")
-        print(f"[SIGNUP] Password type: {type(user.password)}")
-        
-        # Bcrypt has a hard limit of 72 bytes - ensure we don't exceed it
-        password_to_hash = user.password
-        if password_bytes > 72:
-            print(f"[SIGNUP] WARNING: Password exceeds 72 bytes ({password_bytes} bytes), truncating to 72 bytes")
-            # Truncate to 72 bytes to avoid bcrypt error
-            password_to_hash = user.password.encode('utf-8')[:72].decode('utf-8', errors='ignore')
-            print(f"[SIGNUP] Truncated password length: {len(password_to_hash)} chars, {len(password_to_hash.encode('utf-8'))} bytes")
-        
-        # Hash the password - wrap in try-except to catch any bcrypt errors
-        try:
-            hashed_password = get_password_hash(password_to_hash)
-        except ValueError as e:
-            # Catch bcrypt's ValueError for password length issues
-            error_msg = str(e)
-            print(f"[SIGNUP] ERROR: Bcrypt hashing failed: {error_msg}")
-            print(f"[SIGNUP] Password at hash time - chars: {len(password_to_hash)}, bytes: {len(password_to_hash.encode('utf-8'))}")
-            import traceback
-            traceback.print_exc()
-            raise HTTPException(
-                status_code=400, 
-                detail=f"Password validation failed. Please use a password with fewer characters."
-            )
-        except Exception as e:
-            # Catch any other unexpected errors
-            error_msg = str(e)
-            print(f"[SIGNUP] ERROR: Unexpected error during password hashing: {error_msg}")
-            print(f"[SIGNUP] Error type: {type(e)}")
-            import traceback
-            traceback.print_exc()
-            raise HTTPException(
-                status_code=500, 
-                detail=f"Password hashing failed. Please try again."
-            )
+        # Hash the password - get_password_hash handles truncation to 72 bytes automatically
+        # Just hash it directly - no need for complex error handling
+        hashed_password = get_password_hash(user.password)
         
         users_db[user.email] = {"email": user.email, "hashed_password": hashed_password}
         save_users(users_db)
