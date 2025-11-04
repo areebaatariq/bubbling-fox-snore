@@ -250,6 +250,15 @@ def check_health():
 async def read_users_me():
     return {"email": "default@session.local"}
 
+# Explicit OPTIONS handler for profile endpoint (must be before PUT/GET)
+@app.options("/api/v1/profile")
+async def options_profile(response: Response):
+    response.headers["Access-Control-Allow-Origin"] = "*"
+    response.headers["Access-Control-Allow-Methods"] = "GET, PUT, OPTIONS"
+    response.headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization"
+    response.headers["Access-Control-Max-Age"] = "3600"
+    return {"message": "OK"}
+
 @app.put("/api/v1/profile")
 async def update_profile(profile: UserProfile):
     user = get_default_user()
