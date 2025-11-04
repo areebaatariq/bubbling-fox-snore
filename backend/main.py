@@ -211,6 +211,17 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
         headers={"Access-Control-Allow-Origin": "*"}
     )
 
+# Middleware to log request details for debugging (without consuming body)
+class RequestLoggingMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request: Request, call_next):
+        if request.method == "POST" and "/api/v1/auth/signup" in str(request.url):
+            print(f"Signup request received - URL: {request.url}")
+            print(f"Content-Type: {request.headers.get('content-type', 'not set')}")
+            print(f"Content-Length: {request.headers.get('content-length', 'not set')}")
+        
+        response = await call_next(request)
+        return response
+
 # Custom middleware to handle OPTIONS requests explicitly
 class OptionsMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
@@ -285,44 +296,74 @@ async def options_signup(response: Response):
     return {}
 
 @app.post("/api/v1/auth/signup", status_code=status.HTTP_201_CREATED)
-async def signup(user: UserCreate, response: Response):
+async def signup(request: Request, response: Response):
     try:
         # Add CORS headers to response
         response.headers["Access-Control-Allow-Origin"] = "*"
         response.headers["Access-Control-Allow-Methods"] = "POST, OPTIONS"
         response.headers["Access-Control-Allow-Headers"] = "Content-Type"
         
-        # Log the signup attempt for debugging
-        print(f"Signup attempt for email: {user.email}")
+        # Log request details for debugging in production
+        content_type = request.headers.get("content-type", "not set")
+        print(f"[SIGNUP] Content-Type: {content_type}")
+        
+        # Try to get raw body for logging (but don't consume it)
+        try:
+            body_bytes = await request.body()
+            print(f"[SIGNUP] Raw body length: {len(body_bytes)} bytes")
+            # Parse JSON from body
+            import json as json_module
+            body = json_module.loads(body_bytes)
+            print(f"[SIGNUP] Parsed body: {body}")
+        except Exception as e:
+            print(f"[SIGNUP] Error reading body: {e}")
+            import traceback
+            traceback.print_exc()
+            raise HTTPException(status_code=400, detail="Invalid request body")
+        
+        # Validate using Pydantic model
+        try:
+            user = UserCreate(**body)
+        except Exception as e:
+            print(f"[SIGNUP] Pydantic validation error: {e}")
+            import traceback
+            traceback.print_exc()
+            # If it's a validation error, provide helpful message
+            error_msg = str(e)
+            if "password" in error_msg.lower() and "long" in error_msg.lower():
+                raise HTTPException(status_code=400, detail="Password validation failed. Please check the password requirements.")
+            raise HTTPException(status_code=400, detail=f"Validation error: {error_msg}")
+        
+        # Log the validated values
+        password_length = len(user.password)
+        password_bytes_len = len(user.password.encode('utf-8'))
+        print(f"[SIGNUP] Email: {user.email}")
+        print(f"[SIGNUP] Password - chars: {password_length}, bytes: {password_bytes_len}")
+        print(f"[SIGNUP] Password repr: {repr(user.password[:20])}...")  # First 20 chars only for security
         
         if user.email in users_db:
             raise HTTPException(status_code=400, detail="Email already registered")
         
         # Validate password strength and length
-        # bcrypt has a 72-byte limit, but we'll limit to 70 characters to be safe with UTF-8 encoding
-        if len(user.password) < 6:
+        if password_length < 6:
             raise HTTPException(status_code=400, detail="Password must be at least 6 characters long")
-        if len(user.password) > 70:
-            raise HTTPException(status_code=400, detail="Password must be no more than 70 characters long")
         
-        # Truncate password to 72 bytes if needed (bcrypt limitation)
-        password_bytes = user.password.encode('utf-8')
-        if len(password_bytes) > 72:
-            # Truncate to 72 bytes
-            password_bytes = password_bytes[:72]
-            user.password = password_bytes.decode('utf-8', errors='ignore')
+        # Check byte length for bcrypt limitation (72 bytes max)
+        if password_bytes_len > 72:
+            raise HTTPException(status_code=400, detail=f"Password is too long ({password_bytes_len} bytes). Maximum is 72 bytes.")
         
+        # Hash the password
         hashed_password = get_password_hash(user.password)
         users_db[user.email] = {"email": user.email, "hashed_password": hashed_password}
         save_users(users_db)
+        print(f"[SIGNUP] Successfully created user: {user.email}")
         return {"message": "User created successfully", "email": user.email}
     except HTTPException:
         raise
     except Exception as e:
         import traceback
         traceback.print_exc()
-        print(f"Signup error: {str(e)}")
-        # Provide a more user-friendly error message
+        print(f"[SIGNUP] Unexpected error: {str(e)}")
         error_detail = str(e)
         if "password cannot be longer than 72 bytes" in error_detail.lower():
             raise HTTPException(status_code=400, detail="Password is too long. Please use a password with 70 characters or fewer.")
