@@ -24,8 +24,8 @@ ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 30
 PORT = int(os.getenv("PORT", 8000))
 # Production URLs (hardcoded)
-FRONTEND_URL = "https://demo-frontend-8jn6.onrender.com"
-BACKEND_URL = "https://demo-backend-53z8.onrender.com"
+FRONTEND_URL = "https://demo-frontend-ey2l.onrender.com"
+BACKEND_URL = "https://demo-backend-x340.onrender.com"
 
 # Get the directory where this file is located
 BASE_DIR = Path(__file__).parent
@@ -310,15 +310,7 @@ async def get_current_user(token: str = Depends(oauth2_scheme)):
 
 
 # --- API Endpoints ---
-@app.options("/api/v1/auth/signup")
-async def options_signup(response: Response):
-    response.headers["Access-Control-Allow-Origin"] = "*"
-    response.headers["Access-Control-Allow-Methods"] = "POST, OPTIONS"
-    response.headers["Access-Control-Allow-Headers"] = "Content-Type"
-    response.headers["Access-Control-Max-Age"] = "3600"
-    response.status_code = 200
-    return {}
-
+# Note: No explicit OPTIONS handlers needed - CORSMiddleware handles all OPTIONS requests automatically
 @app.post("/api/v1/auth/signup", status_code=status.HTTP_201_CREATED)
 async def signup(request: Request, response: Response):
     try:
@@ -438,26 +430,7 @@ async def cors_test(request: Request, response: Response):
 async def read_users_me(current_user: dict = Depends(get_current_user)):
     return {"email": current_user["email"]}
 
-# Explicit OPTIONS handler for profile endpoint (must be before PUT/GET)
-@app.options("/api/v1/profile")
-async def options_profile(response: Response):
-    response.headers["Access-Control-Allow-Origin"] = "*"
-    response.headers["Access-Control-Allow-Methods"] = "GET, PUT, OPTIONS"
-    response.headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization"
-    response.headers["Access-Control-Max-Age"] = "3600"
-    response.status_code = 200
-    return {}
-
-# Catch-all OPTIONS handler for any path (less specific, defined after)
-@app.options("/{full_path:path}")
-async def options_handler(full_path: str, response: Response):
-    response.headers["Access-Control-Allow-Origin"] = "*"
-    response.headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, DELETE, OPTIONS, PATCH"
-    response.headers["Access-Control-Allow-Headers"] = "*"
-    response.headers["Access-Control-Max-Age"] = "3600"
-    response.status_code = 200
-    return {}
-
+# No explicit OPTIONS handlers needed - CORSMiddleware handles all OPTIONS requests automatically
 @app.put("/api/v1/profile")
 async def update_profile(profile: UserProfile, response: Response, current_user: dict = Depends(get_current_user)):
     response.headers["Access-Control-Allow-Origin"] = "*"
