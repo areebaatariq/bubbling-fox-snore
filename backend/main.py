@@ -21,7 +21,9 @@ SECRET_KEY = os.getenv("SECRET_KEY", "a_very_secret_key")
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 30
 PORT = int(os.getenv("PORT", 8000))
-FRONTEND_URL = os.getenv("FRONTEND_URL", "https://demo-frontend-8jn6.onrender.com")
+# In production, set FRONTEND_URL environment variable (e.g., https://demo-frontend-8jn6.onrender.com)
+# For development, defaults to localhost
+FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:5137")
 BACKEND_URL = os.getenv("BACKEND_URL", f"http://localhost:{PORT}")
 
 # Get the directory where this file is located
@@ -271,9 +273,19 @@ async def signup(user: UserCreate, response: Response):
         if user.email in users_db:
             raise HTTPException(status_code=400, detail="Email already registered")
         
-        # Validate password strength
+        # Validate password strength and length
+        # bcrypt has a 72-byte limit, but we'll limit to 70 characters to be safe with UTF-8 encoding
         if len(user.password) < 6:
             raise HTTPException(status_code=400, detail="Password must be at least 6 characters long")
+        if len(user.password) > 70:
+            raise HTTPException(status_code=400, detail="Password must be no more than 70 characters long")
+        
+        # Truncate password to 72 bytes if needed (bcrypt limitation)
+        password_bytes = user.password.encode('utf-8')
+        if len(password_bytes) > 72:
+            # Truncate to 72 bytes
+            password_bytes = password_bytes[:72]
+            user.password = password_bytes.decode('utf-8', errors='ignore')
         
         hashed_password = get_password_hash(user.password)
         users_db[user.email] = {"email": user.email, "hashed_password": hashed_password}
@@ -285,6 +297,10 @@ async def signup(user: UserCreate, response: Response):
         import traceback
         traceback.print_exc()
         print(f"Signup error: {str(e)}")
+        # Provide a more user-friendly error message
+        error_detail = str(e)
+        if "password cannot be longer than 72 bytes" in error_detail.lower():
+            raise HTTPException(status_code=400, detail="Password is too long. Please use a password with 70 characters or fewer.")
         raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
 
 @app.post("/api/v1/auth/login", response_model=Token)
