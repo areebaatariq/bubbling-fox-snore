@@ -2,6 +2,8 @@ import os
 import json
 from fastapi import FastAPI, HTTPException, Depends, status, Response
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.exceptions import RequestValidationError
+from fastapi.responses import JSONResponse
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
@@ -189,6 +191,26 @@ class ShoppingList(BaseModel):
 # --- FastAPI App ---
 app = FastAPI()
 
+# Exception handler for validation errors
+@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(request: Request, exc: RequestValidationError):
+    """Handle Pydantic validation errors"""
+    errors = exc.errors()
+    error_messages = []
+    for error in errors:
+        field = ".".join(str(loc) for loc in error.get("loc", []))
+        msg = error.get("msg", "Validation error")
+        error_messages.append(f"{field}: {msg}")
+    
+    return JSONResponse(
+        status_code=400,
+        content={
+            "detail": "; ".join(error_messages) if error_messages else "Validation error",
+            "errors": errors
+        },
+        headers={"Access-Control-Allow-Origin": "*"}
+    )
+
 # Custom middleware to handle OPTIONS requests explicitly
 class OptionsMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
@@ -269,6 +291,9 @@ async def signup(user: UserCreate, response: Response):
         response.headers["Access-Control-Allow-Origin"] = "*"
         response.headers["Access-Control-Allow-Methods"] = "POST, OPTIONS"
         response.headers["Access-Control-Allow-Headers"] = "Content-Type"
+        
+        # Log the signup attempt for debugging
+        print(f"Signup attempt for email: {user.email}")
         
         if user.email in users_db:
             raise HTTPException(status_code=400, detail="Email already registered")
