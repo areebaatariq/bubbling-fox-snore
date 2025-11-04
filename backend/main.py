@@ -347,12 +347,12 @@ async def signup(request: Request, response: Response):
                 raise HTTPException(status_code=400, detail="Password validation failed. Please check the password requirements.")
             raise HTTPException(status_code=400, detail=f"Validation error: {error_msg}")
         
-        # Log the validated values
+        # Log the validated values BEFORE any validation
         password_length = len(user.password)
         password_bytes_len = len(user.password.encode('utf-8'))
         print(f"[SIGNUP] Email: {user.email}")
         print(f"[SIGNUP] Password - chars: {password_length}, bytes: {password_bytes_len}")
-        print(f"[SIGNUP] Password repr: {repr(user.password[:20])}...")  # First 20 chars only for security
+        print(f"[SIGNUP] Password repr (first 50): {repr(user.password[:50])}")  # Show more for debugging
         
         if user.email in users_db:
             raise HTTPException(status_code=400, detail="Email already registered")
@@ -362,11 +362,29 @@ async def signup(request: Request, response: Response):
             raise HTTPException(status_code=400, detail="Password must be at least 6 characters long")
         
         # Check byte length for bcrypt limitation (72 bytes max)
+        # This should NEVER trigger for a normal 6-character password
         if password_bytes_len > 72:
-            raise HTTPException(status_code=400, detail=f"Password is too long ({password_bytes_len} bytes). Maximum is 72 bytes.")
+            print(f"[SIGNUP] ERROR: Password exceeds 72 bytes! Length: {password_length}, Bytes: {password_bytes_len}")
+            raise HTTPException(status_code=400, detail=f"Password is too long ({password_bytes_len} bytes, {password_length} characters). Maximum is 72 bytes.")
         
-        # Hash the password
-        hashed_password = get_password_hash(user.password)
+        # Hash the password - bcrypt should handle passwords up to 72 bytes
+        try:
+            hashed_password = get_password_hash(user.password)
+        except Exception as hash_error:
+            # Log the actual error from bcrypt
+            print(f"[SIGNUP] ERROR during password hashing: {hash_error}")
+            print(f"[SIGNUP] Password at hash time - chars: {len(user.password)}, bytes: {len(user.password.encode('utf-8'))}")
+            import traceback
+            traceback.print_exc()
+            # If it's specifically the bcrypt length error, provide a clear message
+            if "password cannot be longer than 72 bytes" in str(hash_error).lower():
+                raise HTTPException(
+                    status_code=400, 
+                    detail=f"Password is too long for hashing. Length: {password_length} chars, {password_bytes_len} bytes. Maximum is 72 bytes."
+                )
+            # Otherwise, it's a different error
+            raise HTTPException(status_code=500, detail=f"Password hashing failed: {str(hash_error)}")
+        
         users_db[user.email] = {"email": user.email, "hashed_password": hashed_password}
         save_users(users_db)
         print(f"[SIGNUP] Successfully created user: {user.email}")
@@ -377,9 +395,7 @@ async def signup(request: Request, response: Response):
         import traceback
         traceback.print_exc()
         print(f"[SIGNUP] Unexpected error: {str(e)}")
-        error_detail = str(e)
-        if "password cannot be longer than 72 bytes" in error_detail.lower():
-            raise HTTPException(status_code=400, detail="Password is too long. Please use a password with 70 characters or fewer.")
+        print(f"[SIGNUP] Error type: {type(e)}")
         raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
 
 @app.post("/api/v1/auth/login", response_model=Token)
