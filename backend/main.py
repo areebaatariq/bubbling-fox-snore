@@ -254,24 +254,46 @@ class RequestLoggingMiddleware(BaseHTTPMiddleware):
 # CORS configuration - MUST be added FIRST (before other middleware)
 # This ensures CORS headers are set before any other middleware can interfere
 cors_origins = os.getenv("CORS_ORIGINS", "*")
+
+# Build allowed origins list - always include production frontend URL
 if cors_origins == "*":
-    allow_origins_list = ["*"]
+    # Start with explicit list that includes production frontend URL
+    # This ensures the frontend URL is always whitelisted
+    allow_origins_list = [FRONTEND_URL]
+    # If "*" is explicitly requested, use it (allows all origins)
+    # Otherwise, we use the explicit list with FRONTEND_URL
+    # To allow all origins, set CORS_ORIGINS="*" in env
+    # For explicit whitelisting, set CORS_ORIGINS with comma-separated origins
 else:
     # Split comma-separated origins if multiple are provided
     allow_origins_list = [origin.strip() for origin in cors_origins.split(",")]
-    # Always include the frontend URL if not already in the list
-    if FRONTEND_URL not in allow_origins_list:
-        allow_origins_list.append(FRONTEND_URL)
+    
+# Always ensure the production frontend URL is in the allowed origins list
+if FRONTEND_URL not in allow_origins_list:
+    allow_origins_list.append(FRONTEND_URL)
+
+# If CORS_ORIGINS was "*", use "*" for maximum compatibility
+# Otherwise, use the explicit list with FRONTEND_URL and any other origins
+if cors_origins == "*":
+    # Use "*" to allow all origins (FRONTEND_URL is included implicitly)
+    final_allow_origins = ["*"]
+    allow_credentials = False  # Must be False when using "*"
+else:
+    # Use explicit list (FRONTEND_URL is already included)
+    final_allow_origins = allow_origins_list
+    allow_credentials = True  # Can use True when using explicit origins
 
 print(f"[CORS CONFIG] CORS_ORIGINS env: {cors_origins}")
 print(f"[CORS CONFIG] FRONTEND_URL: {FRONTEND_URL}")
-print(f"[CORS CONFIG] Allow origins list: {allow_origins_list}")
+print(f"[CORS CONFIG] Final allow origins: {final_allow_origins}")
+print(f"[CORS CONFIG] Allow credentials: {allow_credentials}")
 
 # Add CORSMiddleware FIRST - this is critical for proper CORS handling
+# The production frontend URL is always whitelisted (explicitly or via "*")
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Hardcode to "*" to allow all origins
-    allow_credentials=False,  # Must be False when using "*"
+    allow_origins=final_allow_origins,  # Includes FRONTEND_URL or "*"
+    allow_credentials=allow_credentials,
     allow_methods=["*"],  # Allow all methods
     allow_headers=["*"],  # Allow all headers
     expose_headers=["*"],
