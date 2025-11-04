@@ -248,27 +248,11 @@ class RequestLoggingMiddleware(BaseHTTPMiddleware):
         response = await call_next(request)
         return response
 
-# Custom middleware to handle OPTIONS requests explicitly
-class OptionsMiddleware(BaseHTTPMiddleware):
-    async def dispatch(self, request: Request, call_next):
-        if request.method == "OPTIONS":
-            response = Response(status_code=200)
-            response.headers["Access-Control-Allow-Origin"] = "*"
-            response.headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, DELETE, OPTIONS, PATCH"
-            response.headers["Access-Control-Allow-Headers"] = "*"
-            response.headers["Access-Control-Max-Age"] = "3600"
-            return response
-        response = await call_next(request)
-        return response
+# Removed OptionsMiddleware - CORSMiddleware handles OPTIONS automatically
+# Having both can cause conflicts and prevent proper CORS handling
 
-# Add CORS logging middleware first to see all CORS activity
-app.add_middleware(CORSLoggingMiddleware)
-
-# Add custom OPTIONS middleware
-app.add_middleware(OptionsMiddleware)
-
-# CORS configuration - must be before route definitions
-# Get allowed origins from environment, default to "*" for all origins
+# CORS configuration - MUST be added FIRST (before other middleware)
+# This ensures CORS headers are set before any other middleware can interfere
 cors_origins = os.getenv("CORS_ORIGINS", "*")
 if cors_origins == "*":
     allow_origins_list = ["*"]
@@ -283,15 +267,22 @@ print(f"[CORS CONFIG] CORS_ORIGINS env: {cors_origins}")
 print(f"[CORS CONFIG] FRONTEND_URL: {FRONTEND_URL}")
 print(f"[CORS CONFIG] Allow origins list: {allow_origins_list}")
 
+# Add CORSMiddleware FIRST - this is critical for proper CORS handling
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=allow_origins_list,  # Use environment variable or default to frontend URL
-    allow_credentials=False,  # Set to False when using "*"
-    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],  # Explicitly include all methods
+    allow_origins=["*"],  # Hardcode to "*" to allow all origins
+    allow_credentials=False,  # Must be False when using "*"
+    allow_methods=["*"],  # Allow all methods
     allow_headers=["*"],  # Allow all headers
     expose_headers=["*"],
     max_age=3600,  # Cache preflight requests for 1 hour
 )
+
+# Add logging middleware AFTER CORS (so we can see what CORS middleware did)
+app.add_middleware(CORSLoggingMiddleware)
+
+# Remove OptionsMiddleware - CORSMiddleware handles OPTIONS automatically
+# Having both can cause conflicts
 
 # Note: FastAPI's CORSMiddleware should handle OPTIONS automatically
 # Explicit handlers are added as fallback to ensure compatibility
