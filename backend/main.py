@@ -176,20 +176,7 @@ class ShoppingList(BaseModel):
 # --- FastAPI App ---
 app = FastAPI()
 
-# CORS configuration
-origins = [
-    "http://localhost:5173",
-    "http://localhost:5137",
-    "http://127.0.0.1:5173",
-    "http://127.0.0.1:5137",
-    "https://bubbling-fox-snore.onrender.com",  # Frontend Render URL
-]
-
-# Add frontend URL if provided via environment variable
-frontend_url = os.getenv("FRONTEND_URL")
-if frontend_url:
-    origins.append(frontend_url)
-
+# CORS configuration - must be before route definitions
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],  # Allow all origins for CORS preflight
@@ -198,6 +185,11 @@ app.add_middleware(
     allow_headers=["*"],  # Allow all headers
     expose_headers=["*"],
 )
+
+# Add catch-all OPTIONS handler for CORS preflight
+@app.options("/{full_path:path}")
+async def options_handler(full_path: str):
+    return {"message": "OK"}
 
 # --- Dependency ---
 # No authentication required - use default session
