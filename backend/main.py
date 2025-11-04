@@ -182,6 +182,7 @@ origins = [
     "http://localhost:5137",
     "http://127.0.0.1:5173",
     "http://127.0.0.1:5137",
+    "https://bubbling-fox-snore.onrender.com",  # Frontend Render URL
 ]
 
 # Add frontend URL if provided via environment variable
@@ -191,10 +192,11 @@ if frontend_url:
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Allow all origins - credentials not needed without auth
-    allow_credentials=False,
-    allow_methods=["*"],
-    allow_headers=["*", "Content-Type"],
+    allow_origins=["*"],  # Allow all origins for CORS preflight
+    allow_credentials=False,  # Set to False when using "*"
+    allow_methods=["*"],  # Allow all methods including OPTIONS
+    allow_headers=["*"],  # Allow all headers
+    expose_headers=["*"],
 )
 
 # --- Dependency ---
