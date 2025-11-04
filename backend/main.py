@@ -25,7 +25,7 @@ ACCESS_TOKEN_EXPIRE_MINUTES = 30
 PORT = int(os.getenv("PORT", 8000))
 # Production URLs (hardcoded)
 FRONTEND_URL = "https://demo-frontend-ey2l.onrender.com"
-BACKEND_URL = "https://demo-backend-x340.onrender.com"
+BACKEND_URL = "https://backend-demo-xj3s.onrender.com"
 
 # Get the directory where this file is located
 BASE_DIR = Path(__file__).parent
