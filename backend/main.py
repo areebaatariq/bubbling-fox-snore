@@ -513,16 +513,8 @@ async def get_profile(current_user: dict = Depends(get_current_user)):
         "weeklyBudget": weekly_budget
     }
 
-@app.post("/api/v1/meal-plan/generate")
-async def generate_meal_plan(current_user: dict = Depends(get_current_user)):
-    # Generate a weekly meal plan (7 days)
-    user_email = current_user["email"]
-    if user_email not in users_db:
-        users_db[user_email] = {}
-    user_profile = users_db.get(user_email, {}).get("profile", {})
-    dietary_prefs = user_profile.get("dietary_preferences", [])
-    
-    # Filter meals based on dietary preferences
+def get_filtered_meals(dietary_prefs: list):
+    """Helper function to filter meals based on dietary preferences"""
     available_meals = meals_data.copy()
     if "vegetarian" in dietary_prefs or "vegan" in dietary_prefs:
         available_meals = [m for m in available_meals if not any(
@@ -544,6 +536,34 @@ async def generate_meal_plan(current_user: dict = Depends(get_current_user)):
             ing["name"].lower() in ["milk", "feta cheese", "parmesan cheese"] 
             for ing in m["ingredients"]
         )]
+    return available_meals
+
+@app.get("/api/v1/meals/random")
+async def get_random_meal(current_user: dict = Depends(get_current_user)):
+    """Get a random meal filtered by user's dietary preferences"""
+    user_email = current_user["email"]
+    user_profile = users_db.get(user_email, {}).get("profile", {})
+    dietary_prefs = user_profile.get("dietary_preferences", [])
+    
+    available_meals = get_filtered_meals(dietary_prefs)
+    
+    if not available_meals:
+        raise HTTPException(status_code=404, detail="No meals available matching your dietary preferences")
+    
+    selected_meal = random.choice(available_meals)
+    return Meal(**selected_meal).model_dump()
+
+@app.post("/api/v1/meal-plan/generate")
+async def generate_meal_plan(current_user: dict = Depends(get_current_user)):
+    # Generate a weekly meal plan (7 days)
+    user_email = current_user["email"]
+    if user_email not in users_db:
+        users_db[user_email] = {}
+    user_profile = users_db.get(user_email, {}).get("profile", {})
+    dietary_prefs = user_profile.get("dietary_preferences", [])
+    
+    # Filter meals based on dietary preferences
+    available_meals = get_filtered_meals(dietary_prefs)
     
     days = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
     meal_types = ["breakfast", "lunch", "dinner"]

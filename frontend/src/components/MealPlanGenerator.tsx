@@ -113,26 +113,56 @@ const MealPlanGenerator: React.FC<MealPlanGeneratorProps> = ({ userProfile }) =>
   const handleSwapMeal = async (day: string, mealType: "breakfast" | "lunch" | "dinner") => {
     if (!mealPlan) return;
     
-    // For now, regenerate the whole plan - in production, you'd fetch a single meal
-    await generateMealPlan();
-    toast.info(`Swapped ${mealType} for ${day}.`);
+    try {
+      // Fetch a random meal that matches dietary preferences
+      const response = await apiClient.get("/meals/random");
+      const newMeal = response.data;
+      
+      // Update only the specific meal in the meal plan
+      const updatedMeals = mealPlan.meals.map((d) =>
+        d.day === day ? { ...d, [mealType]: newMeal } : d
+      );
+      const updatedPlan = { ...mealPlan, meals: updatedMeals };
+      setMealPlan(updatedPlan);
+      
+      // Recalculate shopping list with the updated meal
+      recalculateShoppingList(updatedPlan);
+      
+      // Update backend
+      await apiClient.put("/meal-plan", updatedPlan);
+      toast.success(`Swapped ${mealType} for ${day}.`);
+    } catch (error: any) {
+      toast.error(error.response?.data?.detail || "Failed to swap meal.");
+    }
   };
 
   const handleRemoveMeal = async (day: string, mealType: "breakfast" | "lunch" | "dinner") => {
     if (!mealPlan) return;
-    const updatedMeals = mealPlan.meals.map((d) =>
-      d.day === day ? { ...d, [mealType]: undefined } : d
-    );
+    
+    // Remove the specific meal from the day plan
+    const updatedMeals = mealPlan.meals.map((d) => {
+      if (d.day === day) {
+        // Create a new object without the mealType property
+        const { [mealType]: removed, ...rest } = d;
+        return rest;
+      }
+      return d;
+    });
+    
     const updatedPlan = { ...mealPlan, meals: updatedMeals };
     setMealPlan(updatedPlan);
+    
+    // Recalculate shopping list without the removed meal
     recalculateShoppingList(updatedPlan);
     
     try {
       await apiClient.put("/meal-plan", updatedPlan);
-      toast.info(`Removed ${mealType} for ${day}.`);
+      toast.success(`Removed ${mealType} for ${day}.`);
     } catch (error: any) {
-      toast.error(error.response?.data?.detail || "Failed to update meal plan.");
-      // Optionally revert state changes
+      toast.error(error.response?.data?.detail || "Failed to remove meal.");
+      // Revert state changes on error
+      setMealPlan(mealPlan);
+      fetchShoppingList();
     }
   };
 
