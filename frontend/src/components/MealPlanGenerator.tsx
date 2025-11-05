@@ -167,10 +167,7 @@ const MealPlanGenerator: React.FC<MealPlanGeneratorProps> = ({ userProfile }) =>
       const updatedPlan = { ...mealPlan, meals: updatedMeals };
       setMealPlan(updatedPlan);
       
-      // Update shopping list incrementally (preserves manually added items and completion status)
-      updateShoppingListIncrementally(updatedPlan);
-      
-      // Update backend
+      // Update backend - shopping list is independent and not affected
       await apiClient.put("/meal-plan", updatedPlan);
       toast.success(`Swapped ${mealType} for ${day}.`);
     } catch (error: any) {
@@ -194,9 +191,7 @@ const MealPlanGenerator: React.FC<MealPlanGeneratorProps> = ({ userProfile }) =>
     const updatedPlan = { ...mealPlan, meals: updatedMeals };
     setMealPlan(updatedPlan);
     
-    // Update shopping list incrementally (preserves manually added items and completion status)
-    updateShoppingListIncrementally(updatedPlan);
-    
+    // Update backend - shopping list is independent and not affected
     try {
       await apiClient.put("/meal-plan", updatedPlan);
       toast.success(`Removed ${mealType} for ${day}.`);
@@ -204,7 +199,6 @@ const MealPlanGenerator: React.FC<MealPlanGeneratorProps> = ({ userProfile }) =>
       toast.error(error.response?.data?.detail || "Failed to remove meal.");
       // Revert state changes on error
       setMealPlan(mealPlan);
-      fetchShoppingList();
     }
   };
 

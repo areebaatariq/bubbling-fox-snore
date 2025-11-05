@@ -629,34 +629,8 @@ async def update_meal_plan(meal_plan: dict, current_user: dict = Depends(get_cur
         users_db[user_email] = {}
     users_db[user_email]["meal_plan"] = meal_plan.get("meals", [])
     save_users(users_db)
-    # Recalculate shopping list
-    shopping_list_items = []
-    ingredients_map = {}
-    for day_plan in meal_plan.get("meals", []):
-        for meal_type in ["breakfast", "lunch", "dinner"]:
-            if meal_type in day_plan and day_plan[meal_type]:
-                meal_data = day_plan[meal_type]
-                for ingredient in meal_data.get("ingredients", []):
-                    ing_name = ingredient.get("name", "").lower()
-                    if ing_name in ingredients_map:
-                        ingredients_map[ing_name]["quantity"] += ingredient.get("quantity", 1)
-                    else:
-                        ingredients_map[ing_name] = {
-                            "name": ingredient.get("name", ""),
-                            "quantity": ingredient.get("quantity", 1),
-                            "unit": ingredient.get("unit", "")
-                        }
-    
-    for ing in ingredients_map.values():
-        shopping_list_items.append(
-            ShoppingListItem(
-                name=ing["name"],
-                quantity=f'{ing["quantity"]} {ing["unit"]}'.strip(),
-            ).model_dump()
-        )
-    
-    users_db[user_email]["shopping_list"] = shopping_list_items
-    save_users(users_db)
+    # Note: Shopping list is independent and not recalculated here
+    # It only gets regenerated when generating a new meal plan
     return {"message": "Meal plan updated successfully"}
 
 @app.get("/api/v1/shopping-list")
