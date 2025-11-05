@@ -53,7 +53,8 @@ const MealPlanGenerator: React.FC<MealPlanGeneratorProps> = ({ userProfile }) =>
       const response = await apiClient.post("/meal-plan/generate");
       const data = response.data;
       setMealPlan(data);
-      const newShoppingList = generateShoppingList(data);
+      // When generating a new plan, regenerate shopping list completely
+      const newShoppingList = generateShoppingListFromMeals(data);
       setShoppingList(newShoppingList);
       updateShoppingListOnBackend(newShoppingList);
       toast.success("Weekly meal plan generated!");
@@ -64,7 +65,7 @@ const MealPlanGenerator: React.FC<MealPlanGeneratorProps> = ({ userProfile }) =>
 
 
 
-  const generateShoppingList = (plan: MealPlan): ShoppingListItem[] => {
+  const generateShoppingListFromMeals = (plan: MealPlan): ShoppingListItem[] => {
     const ingredientsMap: { [key: string]: { quantity: number; unit: string; name: string } } = {};
   
     plan.meals.forEach((dayPlan) => {
@@ -104,10 +105,51 @@ const MealPlanGenerator: React.FC<MealPlanGeneratorProps> = ({ userProfile }) =>
     }));
   };
 
-  const recalculateShoppingList = (updatedPlan: MealPlan) => {
-    const newShoppingList = generateShoppingList(updatedPlan);
-    setShoppingList(newShoppingList);
-    updateShoppingListOnBackend(newShoppingList);
+  const updateShoppingListIncrementally = (updatedPlan: MealPlan) => {
+    // Generate new shopping list from meals only
+    const mealBasedItems = generateShoppingListFromMeals(updatedPlan);
+    
+    // Get current shopping list
+    const currentList = shoppingList;
+    
+    // Create a map of meal-based items by name (lowercase) for quick lookup
+    const mealItemsMap = new Map<string, ShoppingListItem>();
+    mealBasedItems.forEach(item => {
+      mealItemsMap.set(item.name.toLowerCase(), item);
+    });
+    
+    // Separate current items into meal-based and manually-added
+    const manuallyAddedItems: ShoppingListItem[] = [];
+    const mealBasedExistingItems: ShoppingListItem[] = [];
+    
+    currentList.forEach(item => {
+      const itemKey = item.name.toLowerCase();
+      if (mealItemsMap.has(itemKey)) {
+        // This item exists in meals, so it's meal-based
+        mealBasedExistingItems.push(item);
+      } else {
+        // This item doesn't exist in meals, so it was manually added
+        manuallyAddedItems.push(item);
+      }
+    });
+    
+    // Merge meal-based items (from updated plan) with manually added items
+    // Preserve completion status for meal-based items if they exist
+    const updatedMealItems = mealBasedItems.map(newItem => {
+      const existingItem = mealBasedExistingItems.find(
+        item => item.name.toLowerCase() === newItem.name.toLowerCase()
+      );
+      // Preserve completion status if item already exists
+      return existingItem 
+        ? { ...newItem, completed: existingItem.completed }
+        : newItem;
+    });
+    
+    // Combine: meal-based items + manually added items
+    const updatedShoppingList = [...updatedMealItems, ...manuallyAddedItems];
+    
+    setShoppingList(updatedShoppingList);
+    updateShoppingListOnBackend(updatedShoppingList);
   };
 
   const handleSwapMeal = async (day: string, mealType: "breakfast" | "lunch" | "dinner") => {
@@ -125,8 +167,8 @@ const MealPlanGenerator: React.FC<MealPlanGeneratorProps> = ({ userProfile }) =>
       const updatedPlan = { ...mealPlan, meals: updatedMeals };
       setMealPlan(updatedPlan);
       
-      // Recalculate shopping list with the updated meal
-      recalculateShoppingList(updatedPlan);
+      // Update shopping list incrementally (preserves manually added items and completion status)
+      updateShoppingListIncrementally(updatedPlan);
       
       // Update backend
       await apiClient.put("/meal-plan", updatedPlan);
@@ -152,8 +194,8 @@ const MealPlanGenerator: React.FC<MealPlanGeneratorProps> = ({ userProfile }) =>
     const updatedPlan = { ...mealPlan, meals: updatedMeals };
     setMealPlan(updatedPlan);
     
-    // Recalculate shopping list without the removed meal
-    recalculateShoppingList(updatedPlan);
+    // Update shopping list incrementally (preserves manually added items and completion status)
+    updateShoppingListIncrementally(updatedPlan);
     
     try {
       await apiClient.put("/meal-plan", updatedPlan);
