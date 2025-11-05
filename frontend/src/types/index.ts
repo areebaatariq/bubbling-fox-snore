@@ -15,6 +15,7 @@ export interface Meal {
 export interface ShoppingListItem {
   name: string;
   quantity: string;
+  price?: number;
   completed: boolean;
 }
 

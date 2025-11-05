@@ -209,6 +209,7 @@ class MealPlan(BaseModel):
 class ShoppingListItem(BaseModel):
     name: str
     quantity: str
+    price: Optional[float] = None
     completed: bool = False
 
 class ShoppingList(BaseModel):

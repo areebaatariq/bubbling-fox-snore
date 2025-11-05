@@ -22,6 +22,7 @@ const MealPlanGenerator: React.FC<MealPlanGeneratorProps> = ({ userProfile }) =>
   const [shoppingList, setShoppingList] = useState<ShoppingListItem[]>([]);
   const [newShoppingItem, setNewShoppingItem] = useState("");
   const [newShoppingQuantity, setNewShoppingQuantity] = useState("");
+  const [newShoppingPrice, setNewShoppingPrice] = useState("");
 
   useEffect(() => {
     fetchMealPlan();
@@ -215,9 +216,11 @@ const MealPlanGenerator: React.FC<MealPlanGeneratorProps> = ({ userProfile }) =>
       toast.error("Please enter both item and quantity.");
       return;
     }
+    const price = newShoppingPrice.trim() ? parseFloat(newShoppingPrice.trim()) : undefined;
     const newItem: ShoppingListItem = {
       name: newShoppingItem.trim(),
       quantity: newShoppingQuantity.trim(),
+      price: price,
       completed: false,
     };
     const updatedList = [...shoppingList, newItem];
@@ -225,7 +228,26 @@ const MealPlanGenerator: React.FC<MealPlanGeneratorProps> = ({ userProfile }) =>
     updateShoppingListOnBackend(updatedList);
     setNewShoppingItem("");
     setNewShoppingQuantity("");
+    setNewShoppingPrice("");
     toast.success("Item added to shopping list.");
+  };
+
+  const handleUpdateItemPrice = (itemName: string, newPrice: number | undefined) => {
+    const updatedList = shoppingList.map((item) =>
+      item.name === itemName ? { ...item, price: newPrice } : item
+    );
+    setShoppingList(updatedList);
+    updateShoppingListOnBackend(updatedList);
+  };
+
+  const calculateTotalCost = (): number => {
+    return shoppingList.reduce((total, item) => {
+      return total + (item.price || 0);
+    }, 0);
+  };
+
+  const getRemainingBudget = (): number => {
+    return userProfile.weeklyBudget - calculateTotalCost();
   };
 
   const handleRemoveShoppingItem = (itemName: string) => {
@@ -309,16 +331,61 @@ const MealPlanGenerator: React.FC<MealPlanGeneratorProps> = ({ userProfile }) =>
               <CardTitle>Shopping List</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
-              <div className="flex space-x-2 mb-4">
+              {/* Budget Summary */}
+              <div className="bg-muted/50 p-4 rounded-md space-y-2">
+                <div className="flex justify-between items-center">
+                  <span className="text-sm font-medium">Weekly Budget:</span>
+                  <span className="text-sm font-bold">${userProfile.weeklyBudget.toFixed(2)}</span>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span className="text-sm font-medium">Total Cost:</span>
+                  <span className={`text-sm font-bold ${calculateTotalCost() > userProfile.weeklyBudget ? "text-destructive" : "text-green-600"}`}>
+                    ${calculateTotalCost().toFixed(2)}
+                  </span>
+                </div>
+                <div className="flex justify-between items-center border-t pt-2">
+                  <span className="text-sm font-medium">Remaining:</span>
+                  <span className={`text-sm font-bold ${getRemainingBudget() < 0 ? "text-destructive" : "text-green-600"}`}>
+                    ${getRemainingBudget().toFixed(2)}
+                  </span>
+                </div>
+                {userProfile.weeklyBudget > 0 && (
+                  <div className="w-full bg-muted rounded-full h-2 mt-2">
+                    <div
+                      className={`h-2 rounded-full transition-all ${
+                        calculateTotalCost() > userProfile.weeklyBudget
+                          ? "bg-destructive"
+                          : calculateTotalCost() / userProfile.weeklyBudget > 0.8
+                          ? "bg-yellow-500"
+                          : "bg-green-600"
+                      }`}
+                      style={{
+                        width: `${Math.min((calculateTotalCost() / userProfile.weeklyBudget) * 100, 100)}%`,
+                      }}
+                    />
+                  </div>
+                )}
+              </div>
+
+              <div className="flex flex-wrap gap-2 mb-4">
                 <Input
-                  placeholder="Add new item"
+                  placeholder="Item name"
                   value={newShoppingItem}
                   onChange={(e) => setNewShoppingItem(e.target.value)}
+                  className="flex-1 min-w-[120px]"
                 />
                 <Input
                   placeholder="Quantity"
                   value={newShoppingQuantity}
                   onChange={(e) => setNewShoppingQuantity(e.target.value)}
+                  className="w-24"
+                />
+                <Input
+                  type="number"
+                  step="0.01"
+                  placeholder="Price $"
+                  value={newShoppingPrice}
+                  onChange={(e) => setNewShoppingPrice(e.target.value)}
                   className="w-24"
                 />
                 <Button onClick={handleAddShoppingItem} size="icon">
@@ -331,20 +398,41 @@ const MealPlanGenerator: React.FC<MealPlanGeneratorProps> = ({ userProfile }) =>
                   {shoppingList.map((item) => (
                     <li
                       key={item.name}
-                      className="flex items-center justify-between bg-muted/50 p-3 rounded-md"
+                      className="flex items-center justify-between bg-muted/50 p-3 rounded-md gap-2"
                     >
-                      <div className="flex items-center space-x-3 flex-1">
+                      <div className="flex items-center space-x-3 flex-1 min-w-0">
                         <Checkbox
                           id={`item-${item.name}`}
                           checked={item.completed}
                           onCheckedChange={() => handleToggleShoppingItem(item.name)}
                         />
-                        <Label
-                          htmlFor={`item-${item.name}`}
-                          className={`flex-1 text-left ${item.completed ? "line-through text-muted-foreground" : ""}`}
-                        >
-                          {item.name} ({item.quantity})
-                        </Label>
+                        <div className="flex-1 min-w-0">
+                          <Label
+                            htmlFor={`item-${item.name}`}
+                            className={`text-sm ${item.completed ? "line-through text-muted-foreground" : ""}`}
+                          >
+                            {item.name} ({item.quantity})
+                          </Label>
+                          <div className="flex items-center gap-2 mt-1">
+                            <Input
+                              type="number"
+                              step="0.01"
+                              placeholder="Price"
+                              value={item.price || ""}
+                              onChange={(e) => {
+                                const value = e.target.value;
+                                handleUpdateItemPrice(item.name, value ? parseFloat(value) : undefined);
+                              }}
+                              className="h-7 w-20 text-xs"
+                              disabled={item.completed}
+                            />
+                            {item.price !== undefined && (
+                              <span className="text-xs font-medium text-green-600">
+                                ${item.price.toFixed(2)}
+                              </span>
+                            )}
+                          </div>
+                        </div>
                       </div>
                       <Button
                         variant="destructive"

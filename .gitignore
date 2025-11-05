@@ -32,8 +32,6 @@ node_modules/
 build/
 dist/
 .next/
-.env
-.env.local
 
 # Logs
 *.log
@@ -143,7 +141,6 @@ celerybeat.pid
 *.sage.py
 
 # Environments
-.env
 .venv
 env/
 venv/
@@ -171,3 +168,4 @@ dmypy.json
 
 # Application data
 backend/users.json
+config.bat
